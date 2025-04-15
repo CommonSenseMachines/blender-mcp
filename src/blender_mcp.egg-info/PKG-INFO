@@ -1,3 +1,20 @@
+Metadata-Version: 2.4
+Name: blender-mcp
+Version: 1.1.1
+Summary: Blender integration through the Model Context Protocol
+Author-email: Your Name <your.email@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/yourusername/blender-mcp
+Project-URL: Bug Tracker, https://github.com/yourusername/blender-mcp/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: mcp[cli]>=1.3.0
+Dynamic: license-file
+
 # BlenderMCP x CSM.ai x Cursor
 
 Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This integration enables text and image based editing capabilities in Blender.
@@ -60,10 +77,10 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 ## Blender Configuration
 
 1. Launch Blender
-2. Navigate to `Edit → Preferences` ![Blender Preferences 1](assets/addon1.png) ![Blender Preferences 2](assets/addon2.png)
-3. Install the `addon.py` file from this repository ![Install Addon](assets/addon3.png)
-4. Verify that the Blender MCP addon appears in your addon list ![Addon List](assets/addon4.png)
-5. Start the MCP server and enable the 'Use CSM.ai 3D models' option ![Start Server](assets/step1.png) ![Enable CSM](assets/step2.png)
+2. Navigate to `Edit → Preferences`
+3. Install the `addon.py` file from this repository
+4. Verify that the Blender MCP addon appears in your addon list
+5. Start the MCP server and enable the 'Use CSM.ai 3D models' option
 6. Enter your CSM API key to begin using the integration with Cursor
 
 ## CSM.ai Integration
