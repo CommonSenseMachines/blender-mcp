@@ -60,10 +60,10 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 ## Blender Configuration
 
 1. Launch Blender
-2. Navigate to `Edit → Preferences` ![Blender Preferences 1](assets/addon1.png) ![Blender Preferences 2](assets/addon2.png)
-3. Install the `addon.py` file from this repository ![Install Addon](assets/addon3.png)
-4. Verify that the Blender MCP addon appears in your addon list ![Addon List](assets/addon4.png)
-5. Start the MCP server and enable the 'Use CSM.ai 3D models' option ![Start Server](assets/step1.png) ![Enable CSM](assets/step2.png)
+2. Navigate to `Edit → Preferences` <img src="assets/addon1.png" width="300"> <img src="assets/addon2.png" width="300">
+3. Install the `addon.py` file from this repository <img src="assets/addon3.png" width="300">
+4. Verify that the Blender MCP addon appears in your addon list <img src="assets/addon4.png" width="300">
+5. Start the MCP server and enable the 'Use CSM.ai 3D models' option <img src="assets/step1.png" width="300"> <img src="assets/step2.png" width="300">
 6. Enter your CSM API key to begin using the integration with Cursor
 
 ## CSM.ai Integration
