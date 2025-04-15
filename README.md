@@ -6,7 +6,7 @@ Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This inte
 ┌─────────────┐           ┌──────────────┐           ┌──────────────┐
 │             │  Models   │              │  Commands │              │
 │   CSM.ai    │◄─────────►│  Blender MCP │◄─────────►│    Cursor    │
-│ Asset Store │           │  Integration │           │   AI Agent   │
+│Assets/Scenes│           │  Integration │           │   AI Coder   │
 │             │           │              │           │              │
 └─────────────┘           └──────────────┘           └──────────────┘
        ▲                          │                          │
