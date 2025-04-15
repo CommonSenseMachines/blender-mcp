@@ -55,6 +55,7 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
         }
     }
 }
+```
 
 ## Blender Configuration
 
