@@ -2,21 +2,18 @@
 
 Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This integration enables text and image based editing capabilities in Blender.
 
-```
-┌─────────────┐           ┌──────────────┐           ┌──────────────┐
-│             │  Models   │              │  Commands │              │
-│   CSM.ai    │◄─────────►│  Blender MCP │◄─────────►│    Cursor    │
-│Assets/Scenes│           │  Integration │           │   AI Coder   │
-│             │           │              │           │              │
-└─────────────┘           └──────────────┘           └──────────────┘
-       ▲                          │                          │
-       │                          │                          │
-       │          ┌───────────────▼──────────────────┐       │
-       │          │                                  │       │
-       └──────────┤           Blender                │ ◄─────┘
-                  │     Execution Environment        │
-                  │                                  │
-                  └──────────────────────────────────┘
+```   ╭───────────╮       ╭───────────╮       ╭───────────╮
+      │  CSM.ai   │◄━━━━━►│  Blender  │◄━━━━━►│  Cursor   │
+      │ 3D Assets │       │    MCP    │       │ AI Coding │
+      ╰─────┬─────╯       ╰─────┬─────╯       ╰─────┬─────╯
+            │                   │                   │
+            ▼                   ▼                   ▼
+      ╭─────────────────────────────────────────────────╮
+      │                                                 │
+      │               BLENDER ENGINE                    │
+      │        Creative 3D Modeling Environment         │
+      │                                                 │
+      ╰─────────────────────────────────────────────────╯
 ```
 
 ## Overview
@@ -57,9 +54,7 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
         }
     }
 }
-```
-
-## Blender Configuration
+```## Blender Configuration
 
 1. Launch Blender
 2. Navigate to `Edit → Preferences`
@@ -85,3 +80,6 @@ This workflow creates a powerful ecosystem where:
 ## Acknowledgements
 
 [Blender MCP](https://github.com/sponsors/ahujasid)
+
+
+
