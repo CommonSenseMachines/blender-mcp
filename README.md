@@ -1,4 +1,4 @@
-# BlenderMCP - Blender Model Context Protocol Integration
+# BlenderMCP x CSM.ai x Cursor
 
 Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This integration enables text and image based editing capabilities in Blender.
 
