@@ -2,6 +2,23 @@
 
 Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This integration enables text and image based editing capabilities in Blender.
 
+```
+┌─────────────┐           ┌──────────────┐           ┌──────────────┐
+│             │  Models   │              │  Commands │              │
+│   CSM.ai    │◄─────────►│  Blender MCP │◄─────────►│    Cursor    │
+│ Asset Store │           │  Integration │           │   AI Agent   │
+│             │           │              │           │              │
+└─────────────┘           └──────────────┘           └──────────────┘
+       ▲                          │                          │
+       │                          │                          │
+       │          ┌───────────────▼──────────────────┐       │
+       │          │                                  │       │
+       └──────────┤           Blender               │◄──────┘
+                  │     Execution Environment       │
+                  │                                  │
+                  └──────────────────────────────────┘
+```
+
 ## Overview
 
 BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowing for powerful AI-assisted 3D modeling workflows.
