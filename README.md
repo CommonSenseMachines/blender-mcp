@@ -13,8 +13,8 @@ Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This inte
        │                          │                          │
        │          ┌───────────────▼──────────────────┐       │
        │          │                                  │       │
-       └──────────┤           Blender               │◄──────┘
-                  │     Execution Environment       │
+       └──────────┤           Blender                │ ◄─────┘
+                  │     Execution Environment        │
                   │                                  │
                   └──────────────────────────────────┘
 ```
