@@ -55,7 +55,8 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
         }
     }
 }
-```## Blender Configuration
+
+## Blender Configuration
 
 1. Launch Blender
 2. Navigate to `Edit → Preferences`
