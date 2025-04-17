@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, List
 import os
 import requests
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -452,9 +453,9 @@ def animate_object(ctx: Context, object_name: str, animation_prompt: str, temp_f
         logger.info(f"Starting animation process for '{object_name}' with prompt '{animation_prompt}'")
         logger.info("Animation processing may take 30-60 seconds or longer depending on model complexity")
         
-        # Export the mesh to a temporary file, send it to the animation API, and import the result
-        # This allows us to bypass most of the complexity in the Blender addon
-
+        # Handle None value for collection_name properly
+        collection_name_arg = f'"{collection_name}"' if collection_name else "None"
+        
         # Create code to execute in Blender
         code = f"""
 import bpy
@@ -463,28 +464,38 @@ import tempfile
 import base64
 import requests
 import json
+import time
 from pathlib import Path
 
 # Animation server URL
 SERVER_URL = "http://35.190.131.188:9000/animate"
 
 def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide", collection_name=None):
-    print(f"Starting animation of {{obj_name}} with prompt '{{text_prompt}}'")
+    print(f"[DEBUG] Animation process started at: {time.strftime('%H:%M:%S')}")
+    print(f"[DEBUG] Starting animation of {{obj_name}} with prompt '{{text_prompt}}'")
+    print(f"[DEBUG] Parameters: format={temp_format}, handle_original={handle_original}, collection={collection_name}")
     print("This may take 30-60 seconds or longer depending on model complexity")
     
     # Get the object
     obj = bpy.data.objects.get(obj_name)
     if not obj:
+        print(f"[ERROR] Object {{obj_name}} not found in scene")
         return {{"status": "error", "message": f"Object {{obj_name}} not found"}}
     
+    print(f"[DEBUG] Object found: {{obj.name}}, type: {{obj.type}}")
+    
     if obj.type != 'MESH':
+        print(f"[ERROR] Object {{obj_name}} is not a mesh (type: {{obj.type}})")
         return {{"status": "error", "message": f"Object {{obj_name}} is not a mesh"}}
     
     # Get Blender file directory
     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else None
+    print(f"[DEBUG] Blender file directory: {{blend_dir}}")
     
     # Create temp directory
     with tempfile.TemporaryDirectory() as temp_dir:
+        print(f"[DEBUG] Created temp directory: {{temp_dir}}")
+        
         # Create temporary filenames
         temp_mesh_path = os.path.join(temp_dir, f"{{obj_name}}_temp.{{temp_format}}")
         
@@ -492,36 +503,56 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
         safe_prompt = text_prompt.replace(" ", "_").replace("/", "-").lower()
         output_fbx_path = os.path.join(temp_dir, f"{{obj_name}}_{{safe_prompt}}.fbx")
         
+        print(f"[DEBUG] Temp mesh path: {{temp_mesh_path}}")
+        print(f"[DEBUG] Output FBX path: {{output_fbx_path}}")
+        
         # Select only this object
+        print(f"[DEBUG] Selecting object for export")
         bpy.ops.object.select_all(action='DESELECT')
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
         
         # Export the mesh
-        if temp_format == "glb":
-            bpy.ops.export_scene.gltf(
-                filepath=temp_mesh_path,
-                export_format='GLB',
-                use_selection=True,
-                export_animations=False
-            )
-        else:
-            # Fallback to FBX
-            bpy.ops.export_scene.fbx(
-                filepath=temp_mesh_path,
-                use_selection=True,
-                embed_textures=True
-            )
+        print(f"[DEBUG] Exporting mesh to {{temp_format}} format")
+        try:
+            if temp_format == "glb":
+                bpy.ops.export_scene.gltf(
+                    filepath=temp_mesh_path,
+                    export_format='GLB',
+                    use_selection=True,
+                    export_animations=False
+                )
+                print(f"[DEBUG] GLB export completed")
+            else:
+                # Fallback to FBX
+                bpy.ops.export_scene.fbx(
+                    filepath=temp_mesh_path,
+                    use_selection=True,
+                    embed_textures=True
+                )
+                print(f"[DEBUG] FBX export completed")
+        except Exception as export_err:
+            print(f"[ERROR] Export failed: {{str(export_err)}}")
+            return {{"status": "error", "message": f"Failed to export mesh: {{str(export_err)}}"}}
         
         # Check if file exists
         if not os.path.exists(temp_mesh_path):
+            print(f"[ERROR] Exported file not found at {{temp_mesh_path}}")
             return {{"status": "error", "message": f"Failed to export temporary mesh file"}}
         
         # Read and encode the mesh file
-        with open(temp_mesh_path, "rb") as f:
-            mesh_b64 = base64.b64encode(f.read()).decode("utf-8")
+        file_size = os.path.getsize(temp_mesh_path)
+        print(f"[DEBUG] Reading exported file ({{file_size}} bytes)")
+        try:
+            with open(temp_mesh_path, "rb") as f:
+                mesh_b64 = base64.b64encode(f.read()).decode("utf-8")
+            print(f"[DEBUG] File encoded to base64 (length: {{len(mesh_b64)}})")
+        except Exception as encode_err:
+            print(f"[ERROR] File encoding failed: {{str(encode_err)}}")
+            return {{"status": "error", "message": f"Failed to encode mesh file: {{str(encode_err)}}"}}
         
         # Build the request payload
+        print(f"[DEBUG] Building API request payload")
         payload = {{
             "mesh_b64_json": mesh_b64,
             "text_prompt": text_prompt,
@@ -539,40 +570,61 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
         }}
         
         # Send request and stream response to file
-        print(f"Sending animation request to AI service...")
+        print(f"[DEBUG] Sending animation request to AI service: {{SERVER_URL}}")
+        request_start_time = time.time()
         try:
             # Set a longer timeout for the animation API request
+            print(f"[DEBUG] Initiating POST request with 120s timeout")
             resp = requests.post(SERVER_URL, json=payload, stream=True, timeout=120)
             
+            print(f"[DEBUG] Received response with status code: {{resp.status_code}}")
             if resp.status_code != 200:
+                error_text = resp.text[:500] if resp.text else "No error details"
+                print(f"[ERROR] Animation server returned error: {{resp.status_code}}, details: {{error_text}}")
                 return {{
                     "status": "error",
                     "message": f"Animation server error: {{resp.status_code}}",
-                    "details": resp.text[:500]  # Limit response size
+                    "details": error_text
                 }}
             
-            print("Receiving animation data from AI service...")
+            print("[DEBUG] Receiving animation data from AI service...")
             # Save the animated FBX file
+            bytes_received = 0
             with open(output_fbx_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=8192):
                     if chunk:
+                        bytes_received += len(chunk)
                         f.write(chunk)
             
+            request_duration = time.time() - request_start_time
+            print(f"[DEBUG] Download complete in {{request_duration:.2f}} seconds, received {{bytes_received}} bytes")
+            
             if not os.path.exists(output_fbx_path):
+                print(f"[ERROR] FBX file not saved at {{output_fbx_path}}")
                 return {{"status": "error", "message": "Failed to save animated FBX file"}}
             
-            print(f"Animation received! Importing into Blender...")
+            fbx_size = os.path.getsize(output_fbx_path)
+            print(f"[DEBUG] Animation received! FBX file size: {{fbx_size}} bytes")
+            print(f"[DEBUG] Importing animated FBX into Blender...")
+            
             # Import the animated file
             # First store current objects to determine which are new
             existing_objects = set(bpy.data.objects)
             
             # Import the animated FBX
-            bpy.ops.import_scene.fbx(filepath=output_fbx_path)
+            try:
+                bpy.ops.import_scene.fbx(filepath=output_fbx_path)
+                print(f"[DEBUG] FBX import operation completed")
+            except Exception as import_err:
+                print(f"[ERROR] FBX import failed: {{str(import_err)}}")
+                return {{"status": "error", "message": f"Failed to import animated FBX: {{str(import_err)}}"}}
             
             # Get new objects
             imported_objects = list(set(bpy.data.objects) - existing_objects)
+            print(f"[DEBUG] Import created {{len(imported_objects)}} new objects")
             
             if not imported_objects:
+                print(f"[ERROR] No objects were imported from the animation FBX")
                 return {{"status": "error", "message": "No objects imported from animation"}}
             
             # Get the imported armature and mesh
@@ -580,64 +632,83 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
             mesh_obj = None
             
             for new_obj in imported_objects:
+                print(f"[DEBUG] Imported object: {{new_obj.name}}, type: {{new_obj.type}}")
                 if new_obj.type == 'ARMATURE':
                     armature_obj = new_obj
                     new_obj.name = f"{{obj_name}}_{{safe_prompt}}_armature"
+                    print(f"[DEBUG] Renamed armature to: {{new_obj.name}}")
                 elif new_obj.type == 'MESH':
                     mesh_obj = new_obj
                     new_obj.name = f"{{obj_name}}_{{safe_prompt}}"
+                    print(f"[DEBUG] Renamed mesh to: {{new_obj.name}}")
             
             # Organize them in a new collection
             if collection_name is None:
                 collection_name = f"{{obj_name}}_Animations"
                 
+            print(f"[DEBUG] Using collection: {{collection_name}}")
             if collection_name not in bpy.data.collections:
+                print(f"[DEBUG] Creating new collection: {{collection_name}}")
                 anim_collection = bpy.data.collections.new(collection_name)
                 bpy.context.scene.collection.children.link(anim_collection)
             else:
+                print(f"[DEBUG] Using existing collection: {{collection_name}}")
                 anim_collection = bpy.data.collections[collection_name]
                 
             # Move objects to the animation collection
+            print(f"[DEBUG] Moving objects to collection: {{collection_name}}")
             for new_obj in imported_objects:
                 # First remove from current collections
                 for coll in list(new_obj.users_collection):
+                    print(f"[DEBUG] Removing {{new_obj.name}} from collection {{coll.name}}")
                     coll.objects.unlink(new_obj)
                 
                 # Add to animation collection
+                print(f"[DEBUG] Adding {{new_obj.name}} to collection {{anim_collection.name}}")
                 anim_collection.objects.link(new_obj)
             
             # Position the animated model at the same location as the original
             if armature_obj and obj:
+                print(f"[DEBUG] Setting armature location to match original: {{obj.location}}")
                 armature_obj.location = obj.location.copy()
             
             # Handle the original object based on the handle_original parameter
+            print(f"[DEBUG] Handling original object with mode: {{handle_original}}")
             if handle_original == "hide":
                 # Hide the original but keep it
+                print(f"[DEBUG] Hiding original object")
                 obj.hide_viewport = True
                 obj.hide_render = True
             elif handle_original == "delete":
                 # Delete the original object
+                print(f"[DEBUG] Deleting original object")
                 bpy.data.objects.remove(obj)
             elif handle_original == "keep":
                 # Keep the original as is, but move it to the side
+                print(f"[DEBUG] Moving original object to the side")
                 obj.location.x += 3.0
             
             # Clean up any potential backup meshes or collections that might have been created
+            print(f"[DEBUG] Checking for backup collections and objects to clean up")
             # Check if MCP_Backup_Meshes collection exists and remove it
             backup_coll = bpy.data.collections.get("MCP_Backup_Meshes")
             if backup_coll:
+                print(f"[DEBUG] Found backup collection to remove: {{backup_coll.name}}")
                 # First remove any objects in this collection
                 for backup_obj in list(backup_coll.objects):
+                    print(f"[DEBUG] Removing backup object: {{backup_obj.name}}")
                     bpy.data.objects.remove(backup_obj)
                 # Then remove the collection
+                print(f"[DEBUG] Removing backup collection")
                 bpy.data.collections.remove(backup_coll)
             
             # Check for backup objects with _backup suffix
             backup_obj_name = f"{{obj_name}}_backup"
             if backup_obj_name in bpy.data.objects:
+                print(f"[DEBUG] Removing backup object: {{backup_obj_name}}")
                 bpy.data.objects.remove(bpy.data.objects[backup_obj_name])
             
-            print(f"Animation complete! Created {{len(imported_objects)}} objects in collection {{collection_name}}")
+            print(f"[DEBUG] Animation complete! Created {{len(imported_objects)}} objects in collection {{collection_name}}")
             
             # Return the result
             result = {{
@@ -654,28 +725,27 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
             if mesh_obj:
                 result["mesh"] = mesh_obj.name
                 
+            print(f"[DEBUG] Animation process completed at: {time.strftime('%H:%M:%S')}")
             return result
             
         except requests.exceptions.Timeout:
-            print("Animation request timed out after 120 seconds")
+            print(f"[ERROR] Animation request timed out after 120 seconds")
             return {{
                 "status": "error", 
                 "message": "Animation service request timed out after 120 seconds. The service might be busy or the model is too complex."
             }}
         except Exception as e:
             import traceback
+            print(f"[ERROR] Exception during animation processing:")
             traceback.print_exc()
             return {{"status": "error", "message": str(e)}}
 
 # Run the animation function
+print(f"[DEBUG] Starting animation script with: object={object_name}, prompt='{animation_prompt}'")
 result = animate_mesh("{object_name}", "{animation_prompt}", "{temp_format}", "{handle_original}", {collection_name_arg})
-print(json.dumps(result))
+print(f"[DEBUG] Animation result: {{json.dumps(result)}}")
 result
 """
-        
-        # Handle None value for collection_name properly
-        collection_name_arg = f'"{collection_name}"' if collection_name else "None"
-        code = code.replace("{collection_name_arg}", collection_name_arg)
         
         # Execute the code in Blender
         try:
