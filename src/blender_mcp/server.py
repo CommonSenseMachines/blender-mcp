@@ -449,6 +449,39 @@ def animate_object(ctx: Context, object_name: str, animation_prompt: str, temp_f
                 "message": f"Object '{object_name}' not found: {str(e)}"
             }, indent=2)
         
+        # Create a duplicate of the object before animating
+        duplicate_code = f"""
+import bpy
+obj = bpy.data.objects.get("{object_name}")
+if obj:
+    # Deselect all objects
+    bpy.ops.object.select_all(action='DESELECT')
+    # Select the object to duplicate
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    # Duplicate the object
+    bpy.ops.object.duplicate()
+    # Get the duplicated object (it's the active object after duplication)
+    duplicated_obj = bpy.context.active_object
+    # Rename it with a suffix
+    duplicated_obj.name = "{object_name}_to_animate"
+    # Return the name of the duplicated object
+    duplicated_obj.name
+"""
+        
+        try:
+            # Execute the duplication code
+            duplicate_result = blender.send_command("execute_code", {"code": duplicate_code})
+            # Get the name of the duplicated object from the result
+            duplicated_name = duplicate_result.get("result", f"{object_name}_to_animate")
+            logger.info(f"Created duplicate of '{object_name}' named '{duplicated_name}'")
+            
+            # Use the duplicated object for animation
+            object_name = duplicated_name
+        except Exception as dup_error:
+            logger.error(f"Failed to duplicate object: {str(dup_error)}")
+            # Continue with original object if duplication fails
+        
         # Let the user know this might take some time
         logger.info(f"Starting animation process for '{object_name}' with prompt '{animation_prompt}'")
         logger.info("Animation processing may take 30-60 seconds or longer depending on model complexity")
@@ -523,6 +556,14 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
                     export_animations=False
                 )
                 print(f"[DEBUG] GLB export completed")
+                
+                # Save a copy of the GLB file locally for inspection
+                local_debug_dir = os.path.join(os.path.expanduser("~"), "blender_mcp_debug")
+                os.makedirs(local_debug_dir, exist_ok=True)
+                local_glb_path = os.path.join(local_debug_dir, f"{{obj_name}}_{{safe_prompt}}_{time.strftime('%Y%m%d_%H%M%S')}.glb")
+                import shutil
+                shutil.copy2(temp_mesh_path, local_glb_path)
+                print(f"[DEBUG] Saved local copy of GLB for inspection at: {{local_glb_path}}")
             else:
                 # Fallback to FBX
                 bpy.ops.export_scene.fbx(
@@ -857,7 +898,7 @@ def asset_creation_strategy() -> str:
        so that the object is in the desired location.
        
     6. To add animation to a mesh object:
-       - Use animate_object() with the name of the object and a descriptive prompt
+       - Use animate_object() with the name of the object and a descriptive prompt. Duplicate the object first.
        - Animation prompts can be actions like "walking", "dancing", "jumping", etc.
        - Only mesh objects can be animated
        - The animation will create a new animated version of the object
