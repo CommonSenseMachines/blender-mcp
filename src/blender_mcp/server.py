@@ -49,8 +49,8 @@ class BlenderConnection:
     def receive_full_response(self, sock, buffer_size=8192):
         """Receive the complete response, potentially in multiple chunks"""
         chunks = []
-        # Use a consistent timeout value that matches the addon's timeout
-        sock.settimeout(15.0)  # Match the addon's timeout
+        # Remove timeout to wait indefinitely like in test_animation.py
+        sock.settimeout(None)
         
         try:
             while True:
@@ -120,8 +120,10 @@ class BlenderConnection:
             self.sock.sendall(json.dumps(command).encode('utf-8'))
             logger.info(f"Command sent, waiting for response...")
             
-            # Set a timeout for receiving - use the same timeout as in receive_full_response
-            self.sock.settimeout(15.0)  # Match the addon's timeout
+            # IMPORTANT: Don't set a timeout - this will allow it to wait indefinitely like test_animation.py
+            # The socket already has a timeout set at connect time, but for long-running operations like animation,
+            # we want to wait as long as needed for the complete response.
+            self.sock.settimeout(None)
             
             # Receive the response using the improved receive_full_response method
             response_data = self.receive_full_response(self.sock)
@@ -140,7 +142,7 @@ class BlenderConnection:
             # Don't try to reconnect here - let the get_blender_connection handle reconnection
             # Just invalidate the current socket so it will be recreated next time
             self.sock = None
-            raise Exception("Timeout waiting for Blender response - try simplifying your request")
+            raise Exception("Timeout waiting for Blender response - animation processing may take longer than expected. Check Blender for results.")
         except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
             logger.error(f"Socket connection error: {str(e)}")
             self.sock = None
@@ -418,6 +420,294 @@ def delete_object(ctx: Context, name: str) -> str:
         return f"Error deleting object: {str(e)}"
 
 @mcp.tool()
+def animate_object(ctx: Context, object_name: str, animation_prompt: str, temp_format: str = "glb", 
+                 handle_original: str = "hide", collection_name: str = None) -> str:
+    """
+    Animate a 3D model using AI-generated animation based on a text prompt.
+    
+    Parameters:
+    - object_name: Name of the object to animate
+    - animation_prompt: Text description of the desired animation (e.g., "walking", "dancing")
+    - temp_format: Format for temporary mesh export (default: "glb")
+    - handle_original: How to handle the original object ("keep", "hide", "delete")
+    - collection_name: Name of collection to organize animations (if None, creates "{object_name}_Animations")
+    
+    Returns information about the animated object.
+    Note: Animation processing may take 30-60 seconds or more.
+    """
+    try:
+        # Get the global connection
+        blender = get_blender_connection()
+        
+        # First check if the object exists
+        try:
+            blender.send_command("get_object_info", {"name": object_name})
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Object '{object_name}' not found: {str(e)}"
+            }, indent=2)
+        
+        # Let the user know this might take some time
+        logger.info(f"Starting animation process for '{object_name}' with prompt '{animation_prompt}'")
+        logger.info("Animation processing may take 30-60 seconds or longer depending on model complexity")
+        
+        # Export the mesh to a temporary file, send it to the animation API, and import the result
+        # This allows us to bypass most of the complexity in the Blender addon
+
+        # Create code to execute in Blender
+        code = f"""
+import bpy
+import os
+import tempfile
+import base64
+import requests
+import json
+from pathlib import Path
+
+# Animation server URL
+SERVER_URL = "http://35.190.131.188:9000/animate"
+
+def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide", collection_name=None):
+    print(f"Starting animation of {{obj_name}} with prompt '{{text_prompt}}'")
+    print("This may take 30-60 seconds or longer depending on model complexity")
+    
+    # Get the object
+    obj = bpy.data.objects.get(obj_name)
+    if not obj:
+        return {{"status": "error", "message": f"Object {{obj_name}} not found"}}
+    
+    if obj.type != 'MESH':
+        return {{"status": "error", "message": f"Object {{obj_name}} is not a mesh"}}
+    
+    # Get Blender file directory
+    blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else None
+    
+    # Create temp directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create temporary filenames
+        temp_mesh_path = os.path.join(temp_dir, f"{{obj_name}}_temp.{{temp_format}}")
+        
+        # Clean prompt for output filename
+        safe_prompt = text_prompt.replace(" ", "_").replace("/", "-").lower()
+        output_fbx_path = os.path.join(temp_dir, f"{{obj_name}}_{{safe_prompt}}.fbx")
+        
+        # Select only this object
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        
+        # Export the mesh
+        if temp_format == "glb":
+            bpy.ops.export_scene.gltf(
+                filepath=temp_mesh_path,
+                export_format='GLB',
+                use_selection=True,
+                export_animations=False
+            )
+        else:
+            # Fallback to FBX
+            bpy.ops.export_scene.fbx(
+                filepath=temp_mesh_path,
+                use_selection=True,
+                embed_textures=True
+            )
+        
+        # Check if file exists
+        if not os.path.exists(temp_mesh_path):
+            return {{"status": "error", "message": f"Failed to export temporary mesh file"}}
+        
+        # Read and encode the mesh file
+        with open(temp_mesh_path, "rb") as f:
+            mesh_b64 = base64.b64encode(f.read()).decode("utf-8")
+        
+        # Build the request payload
+        payload = {{
+            "mesh_b64_json": mesh_b64,
+            "text_prompt": text_prompt,
+            "is_gs": False,
+            "opacity_threshold": 0.0,
+            "no_fingers": False,
+            "rest_pose_type": None,
+            "ignore_pose_parts": [],
+            "input_normal": False,
+            "bw_fix": True,
+            "bw_vis_bone": "LeftArm",
+            "reset_to_rest": False,
+            "retarget": True,
+            "inplace": True
+        }}
+        
+        # Send request and stream response to file
+        print(f"Sending animation request to AI service...")
+        try:
+            # Set a longer timeout for the animation API request
+            resp = requests.post(SERVER_URL, json=payload, stream=True, timeout=120)
+            
+            if resp.status_code != 200:
+                return {{
+                    "status": "error",
+                    "message": f"Animation server error: {{resp.status_code}}",
+                    "details": resp.text[:500]  # Limit response size
+                }}
+            
+            print("Receiving animation data from AI service...")
+            # Save the animated FBX file
+            with open(output_fbx_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            if not os.path.exists(output_fbx_path):
+                return {{"status": "error", "message": "Failed to save animated FBX file"}}
+            
+            print(f"Animation received! Importing into Blender...")
+            # Import the animated file
+            # First store current objects to determine which are new
+            existing_objects = set(bpy.data.objects)
+            
+            # Import the animated FBX
+            bpy.ops.import_scene.fbx(filepath=output_fbx_path)
+            
+            # Get new objects
+            imported_objects = list(set(bpy.data.objects) - existing_objects)
+            
+            if not imported_objects:
+                return {{"status": "error", "message": "No objects imported from animation"}}
+            
+            # Get the imported armature and mesh
+            armature_obj = None
+            mesh_obj = None
+            
+            for new_obj in imported_objects:
+                if new_obj.type == 'ARMATURE':
+                    armature_obj = new_obj
+                    new_obj.name = f"{{obj_name}}_{{safe_prompt}}_armature"
+                elif new_obj.type == 'MESH':
+                    mesh_obj = new_obj
+                    new_obj.name = f"{{obj_name}}_{{safe_prompt}}"
+            
+            # Organize them in a new collection
+            if collection_name is None:
+                collection_name = f"{{obj_name}}_Animations"
+                
+            if collection_name not in bpy.data.collections:
+                anim_collection = bpy.data.collections.new(collection_name)
+                bpy.context.scene.collection.children.link(anim_collection)
+            else:
+                anim_collection = bpy.data.collections[collection_name]
+                
+            # Move objects to the animation collection
+            for new_obj in imported_objects:
+                # First remove from current collections
+                for coll in list(new_obj.users_collection):
+                    coll.objects.unlink(new_obj)
+                
+                # Add to animation collection
+                anim_collection.objects.link(new_obj)
+            
+            # Position the animated model at the same location as the original
+            if armature_obj and obj:
+                armature_obj.location = obj.location.copy()
+            
+            # Handle the original object based on the handle_original parameter
+            if handle_original == "hide":
+                # Hide the original but keep it
+                obj.hide_viewport = True
+                obj.hide_render = True
+            elif handle_original == "delete":
+                # Delete the original object
+                bpy.data.objects.remove(obj)
+            elif handle_original == "keep":
+                # Keep the original as is, but move it to the side
+                obj.location.x += 3.0
+            
+            # Clean up any potential backup meshes or collections that might have been created
+            # Check if MCP_Backup_Meshes collection exists and remove it
+            backup_coll = bpy.data.collections.get("MCP_Backup_Meshes")
+            if backup_coll:
+                # First remove any objects in this collection
+                for backup_obj in list(backup_coll.objects):
+                    bpy.data.objects.remove(backup_obj)
+                # Then remove the collection
+                bpy.data.collections.remove(backup_coll)
+            
+            # Check for backup objects with _backup suffix
+            backup_obj_name = f"{{obj_name}}_backup"
+            if backup_obj_name in bpy.data.objects:
+                bpy.data.objects.remove(bpy.data.objects[backup_obj_name])
+            
+            print(f"Animation complete! Created {{len(imported_objects)}} objects in collection {{collection_name}}")
+            
+            # Return the result
+            result = {{
+                "status": "success",
+                "message": f"Animation created for {{obj_name}} with prompt '{{text_prompt}}'",
+                "imported_objects": [o.name for o in imported_objects],
+                "collection": collection_name,
+                "original_object": obj_name,
+                "handle_original": handle_original
+            }}
+            
+            if armature_obj:
+                result["armature"] = armature_obj.name
+            if mesh_obj:
+                result["mesh"] = mesh_obj.name
+                
+            return result
+            
+        except requests.exceptions.Timeout:
+            print("Animation request timed out after 120 seconds")
+            return {{
+                "status": "error", 
+                "message": "Animation service request timed out after 120 seconds. The service might be busy or the model is too complex."
+            }}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {{"status": "error", "message": str(e)}}
+
+# Run the animation function
+result = animate_mesh("{object_name}", "{animation_prompt}", "{temp_format}", "{handle_original}", {collection_name_arg})
+print(json.dumps(result))
+result
+"""
+        
+        # Handle None value for collection_name properly
+        collection_name_arg = f'"{collection_name}"' if collection_name else "None"
+        code = code.replace("{collection_name_arg}", collection_name_arg)
+        
+        # Execute the code in Blender
+        try:
+            result = blender.send_command("execute_code", {"code": code})
+            
+            # Parse the result
+            if isinstance(result, dict) and "result" in result:
+                if isinstance(result["result"], dict):
+                    return json.dumps(result["result"], indent=2)
+                else:
+                    return str(result["result"])
+            
+            return json.dumps(result, indent=2)
+            
+        except socket.timeout:
+            # Handle timeout specifically
+            logger.error("Timeout while waiting for animation processing")
+            return json.dumps({
+                "status": "timeout",
+                "message": "The animation request is taking longer than expected. Check Blender to see if animation completed.",
+                "recovery_steps": [
+                    "The animation may still be processing in Blender",
+                    "Check the Blender UI for imported objects or new collections",
+                    "If nothing appears after 2-3 minutes, try again with a simpler animation prompt"
+                ]
+            }, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Error animating object: {str(e)}")
+        return f"Error animating object: {str(e)}"
+
+@mcp.tool()
 def set_material(
     ctx: Context,
     object_name: str,
@@ -495,10 +785,18 @@ def asset_creation_strategy() -> str:
     5. After giving the tool location/scale/rotation information (via create_object() and modify_object()),
        double check the related object's location, scale, rotation, and world_bounding_box using get_object_info(),
        so that the object is in the desired location.
+       
+    6. To add animation to a mesh object:
+       - Use animate_object() with the name of the object and a descriptive prompt
+       - Animation prompts can be actions like "walking", "dancing", "jumping", etc.
+       - Only mesh objects can be animated
+       - The animation will create a new animated version of the object
+       - The original object may be modified or hidden by the animation process
 
     Recommended workflow for creating assets:
     1. First try CSM.ai for finding existing high-quality 3D models
-    4. Only fall back to basic primitives as a last resort
+    2. For animation, use the animate_object() function with descriptive prompts
+    3. Only fall back to basic primitives as a last resort
 
     Only fall back to basic creation tools when:
     - All integrations (CSM.ai) are disabled

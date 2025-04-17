@@ -208,6 +208,7 @@ class BlenderMCPServer:
             "get_csm_status": self.get_csm_status,
             "search_csm_models": self.search_csm_models,
             "import_csm_model": lambda **kwargs: self.import_csm_model(**kwargs),
+            "animate_object": lambda **kwargs: self.animate_object(**kwargs),
         }
 
         handler = handlers.get(cmd_type)
@@ -1071,6 +1072,309 @@ class BlenderMCPServer:
         print("=== TEST CLAUDE SEARCH END ===")
         
         return result
+
+    def animate_object(self, object_name, animation_prompt, temp_format="glb", handle_original="hide", collection_name=None):
+        """
+        Animate an object using the animation API
+        
+        Parameters:
+        - object_name: Name of the object to animate
+        - animation_prompt: Text description of the desired animation
+        - temp_format: Format to use for temporary export (default: "glb")
+        - handle_original: How to handle the original object ("keep", "hide", "delete")
+        - collection_name: Name of collection to organize animations (if None, creates "{object_name}_Animations")
+        
+        Returns information about the animated object.
+        """
+        try:
+            import tempfile
+            import os
+            import base64
+            import requests
+            
+            # Check if the object exists
+            obj = bpy.data.objects.get(object_name)
+            if not obj:
+                # Try to find a backup of the object in the special backup collection
+                backup_obj = None
+                backup_collection = bpy.data.collections.get("MCP_Backup_Meshes")
+                if backup_collection:
+                    backup_obj_name = f"{object_name}_backup"
+                    for o in backup_collection.objects:
+                        if o.name == backup_obj_name:
+                            backup_obj = o
+                            break
+                
+                if backup_obj:
+                    print(f"Using backup mesh for {object_name}")
+                    # Use the backup for exporting but keep the original name for reference
+                    obj = backup_obj
+                else:
+                    raise ValueError(f"Object not found: {object_name}")
+            
+            # Verify the object is a mesh
+            if obj.type != 'MESH':
+                raise ValueError(f"Object {object_name} is not a mesh (type: {obj.type})")
+            
+            # Get or create collection for animations
+            if collection_name is None:
+                collection_name = f"{object_name}_Animations"
+            
+            animation_collection = bpy.data.collections.get(collection_name)
+            if not animation_collection:
+                animation_collection = bpy.data.collections.new(collection_name)
+                bpy.context.scene.collection.children.link(animation_collection)
+            
+            # Ensure we have a backup collection and a backup of this mesh
+            backup_collection = bpy.data.collections.get("MCP_Backup_Meshes")
+            if not backup_collection:
+                backup_collection = bpy.data.collections.new("MCP_Backup_Meshes")
+                bpy.context.scene.collection.children.link(backup_collection)
+                # Hide the backup collection
+                layer_collection = bpy.context.view_layer.layer_collection.children.get("MCP_Backup_Meshes")
+                if layer_collection:
+                    layer_collection.exclude = True
+            
+            # Check if we already have a backup of this mesh
+            backup_obj_name = f"{object_name}_backup"
+            backup_obj = None
+            for o in backup_collection.objects:
+                if o.name == backup_obj_name:
+                    backup_obj = o
+                    break
+            
+            # Flag to track if we're using the original object or a potentially hidden one
+            using_original = (obj.name == object_name and not obj.hide_viewport)
+            using_backup = (obj.name.endswith("_backup") or obj.hide_viewport)
+            
+            # If no backup exists, create one
+            if not backup_obj:
+                # Create a linked duplicate which preserves all mesh data
+                backup_obj = bpy.data.objects.new(backup_obj_name, obj.data)
+                backup_obj.matrix_world = obj.matrix_world.copy()
+                
+                # Copy other properties
+                backup_obj.scale = obj.scale.copy()
+                backup_obj.rotation_euler = obj.rotation_euler.copy()
+                backup_obj.location = obj.location.copy()
+                
+                # Copy materials
+                if obj.material_slots:
+                    for i, material_slot in enumerate(obj.material_slots):
+                        if i >= len(backup_obj.material_slots):
+                            backup_obj.data.materials.append(None)
+                        if material_slot.material:
+                            backup_obj.material_slots[i].material = material_slot.material
+                
+                # Add to backup collection
+                backup_collection.objects.link(backup_obj)
+                
+                # Hide the backup
+                backup_obj.hide_viewport = True
+                backup_obj.hide_render = True
+                
+                print(f"Created linked data backup: {backup_obj_name}")
+            else:
+                print(f"Using existing backup: {backup_obj_name}")
+            
+            # Determine which object to use for export
+            if using_backup:
+                # Create a temporary visible copy for export
+                tmp_obj = bpy.data.objects.new(f"{object_name}_temp", backup_obj.data)
+                bpy.context.scene.collection.objects.link(tmp_obj)
+                
+                # Copy transformation
+                tmp_obj.matrix_world = backup_obj.matrix_world.copy()
+                
+                # Make it visible
+                tmp_obj.hide_viewport = False
+                tmp_obj.hide_render = False
+                
+                # Use this temporary object for export
+                export_obj = tmp_obj
+            else:
+                # Use the original object for export
+                export_obj = obj
+            
+            # Create a temporary directory for our files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create temporary filenames
+                temp_mesh_path = os.path.join(temp_dir, f"{object_name}_temp.{temp_format}")
+                
+                # Select only the export object
+                bpy.ops.object.select_all(action='DESELECT')
+                export_obj.select_set(True)
+                bpy.context.view_layer.objects.active = export_obj
+                
+                # Export the mesh
+                if temp_format == "glb":
+                    bpy.ops.export_scene.gltf(
+                        filepath=temp_mesh_path,
+                        export_format='GLB',
+                        use_selection=True,
+                        export_animations=False
+                    )
+                else:
+                    # Fallback to FBX
+                    bpy.ops.export_scene.fbx(
+                        filepath=temp_mesh_path,
+                        use_selection=True,
+                        embed_textures=True
+                    )
+                
+                # Clean up temporary object if we created one
+                if 'tmp_obj' in locals() and tmp_obj:
+                    bpy.data.objects.remove(tmp_obj)
+                
+                # Check if file exists
+                if not os.path.exists(temp_mesh_path):
+                    raise FileNotFoundError(f"Failed to export temporary mesh file: {temp_mesh_path}")
+                
+                # Clean prompt for output filename
+                safe_prompt = animation_prompt.replace(" ", "_").replace("/", "-").lower()
+                output_fbx_path = os.path.join(temp_dir, f"{object_name}_{safe_prompt}.fbx")
+                
+                # Read and encode the mesh file
+                with open(temp_mesh_path, "rb") as f:
+                    mesh_b64 = base64.b64encode(f.read()).decode("utf-8")
+                
+                # Build the request payload
+                payload = {
+                    "mesh_b64_json": mesh_b64,
+                    "text_prompt": animation_prompt,
+                    "is_gs": False,
+                    "opacity_threshold": 0.0,
+                    "no_fingers": False,
+                    "rest_pose_type": None,
+                    "ignore_pose_parts": [],
+                    "input_normal": False,
+                    "bw_fix": True,
+                    "bw_vis_bone": "LeftArm",
+                    "reset_to_rest": False,
+                    "retarget": True,
+                    "inplace": True
+                }
+                
+                # Animation server URL
+                server_url = "http://35.190.131.188:9000/animate"
+                
+                # Send request and stream response to file
+                print(f"Sending animation request for prompt: '{animation_prompt}'...")
+                resp = requests.post(server_url, json=payload, stream=True)
+                
+                if resp.status_code != 200:
+                    error_text = resp.text
+                    print(f"Server returned error {resp.status_code}: {error_text}")
+                    return {
+                        "succeed": False,
+                        "error": f"Animation server error: {resp.status_code}",
+                        "details": error_text[:500]  # Limit response size
+                    }
+                
+                # Save the animated FBX file
+                with open(output_fbx_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                # Check if file was created
+                if not os.path.exists(output_fbx_path):
+                    return {
+                        "succeed": False,
+                        "error": "Failed to save animated FBX file"
+                    }
+                
+                # Store original location and parent for reference
+                original_location = obj.location.copy()
+                original_parent = obj.parent
+                original_collection = None
+                
+                # Find the original object's collection(s)
+                for coll in bpy.data.collections:
+                    if obj.name in coll.objects:
+                        original_collection = coll
+                        break
+                
+                # Import the animated file
+                # First store current objects to determine which are new
+                existing_objects = set(bpy.data.objects)
+                
+                # Import the animated FBX
+                bpy.ops.import_scene.fbx(filepath=output_fbx_path)
+                
+                # Get new objects
+                imported_objects = list(set(bpy.data.objects) - existing_objects)
+                
+                if not imported_objects:
+                    return {
+                        "succeed": False,
+                        "error": "Animation imported but no new objects were created"
+                    }
+                
+                # Move new objects to the animation collection
+                for new_obj in imported_objects:
+                    # First remove from current collections
+                    for coll in list(new_obj.users_collection):
+                        coll.objects.unlink(new_obj)
+                    
+                    # Add to our animation collection
+                    animation_collection.objects.link(new_obj)
+                    
+                    # Set a meaningful name based on the animation prompt
+                    if new_obj.type == 'ARMATURE':
+                        new_obj.name = f"{object_name}_{safe_prompt}_armature"
+                    elif new_obj.type == 'MESH':
+                        new_obj.name = f"{object_name}_{safe_prompt}"
+                
+                # Handle the original object according to preference
+                # Only apply if we're dealing with the visible original (not a backup or already hidden object)
+                if using_original:
+                    if handle_original == "hide":
+                        # Hide the original but keep it
+                        obj.hide_viewport = True
+                        obj.hide_render = True
+                    elif handle_original == "delete":
+                        # Delete the original object, but only if we have a backup
+                        if backup_obj:
+                            bpy.data.objects.remove(obj)
+                # "keep" option just leaves it as is
+                
+                # Find the main animated objects (usually an armature and a mesh)
+                armature_obj = None
+                mesh_obj = None
+                
+                for new_obj in imported_objects:
+                    if new_obj.type == 'ARMATURE':
+                        armature_obj = new_obj
+                    elif new_obj.type == 'MESH':
+                        mesh_obj = new_obj
+                
+                # Create result with imported object info
+                result = {
+                    "succeed": True,
+                    "message": f"Object '{object_name}' animated with prompt: '{animation_prompt}'",
+                    "original_object": object_name,
+                    "animation_prompt": animation_prompt,
+                    "imported_objects": [obj.name for obj in imported_objects],
+                    "collection": collection_name,
+                    "handle_original": handle_original
+                }
+                
+                if armature_obj:
+                    result["armature_object"] = armature_obj.name
+                
+                if mesh_obj:
+                    result["mesh_object"] = mesh_obj.name
+                
+                return result
+                
+        except Exception as e:
+            print(f"Error in animate_object: {str(e)}")
+            traceback.print_exc()
+            return {
+                "succeed": False,
+                "error": str(e)
+            }
 
 # Blender UI Panel
 class BLENDERMCP_PT_Panel(bpy.types.Panel):
