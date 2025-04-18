@@ -36,12 +36,12 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
    git clone https://github.com/CommonSenseMachines/blender-mcp.git
    ```
 
-2. Navigate to the project directory:
+2. Navigate to the project directory (advanced use or extensions):
    ```bash
    cd blender-mcp
    ```
 
-3. Install the package in development mode:
+3. Install the package in development mode (advanced use or extensions):
    ```bash
    pip install -e .
    ```
