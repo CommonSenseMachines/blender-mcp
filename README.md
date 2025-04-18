@@ -102,7 +102,7 @@ This will trigger actions in Blender based on your instructions. The result from
 
 ![Quickstart Result](assets/quickstart_result.png)
 
-Instead of Cursor you can also use other MCP clients like the Claude Desktop App. See instructions in: [Blender MCP](https://github.com/sponsors/ahujasid). You will use the same mcp.json file as above but just enter it in the claude desktop UI.
+Instead of Cursor you can also use other MCP clients like the Claude Desktop App. See instructions in: [Blender MCP](https://github.com/sponsors/ahujasid). You will use the same mcp.json file as above but just enter it in the claude desktop UI. 
 
 ## Acknowledgements
 
