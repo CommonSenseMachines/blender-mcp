@@ -36,7 +36,7 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
    git clone https://github.com/CommonSenseMachines/blender-mcp.git
    ```
 
-2. Navigate to the project directory (advanced use or extensions):
+2. Navigate to the project directory (optional):
    ```bash
    cd blender-mcp
    ```
