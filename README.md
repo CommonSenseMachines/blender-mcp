@@ -50,8 +50,6 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 
 - Upgrade pip
 - Use `python3.10 -m pip install -e .` if you don't normally use python
-- Use Cursor from the blender-mcp directory
-- Use `python3.10` in mcp.json (or whatever your normal Blender Python version is)
 
 ## Cursor Configuration
 
