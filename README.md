@@ -46,6 +46,13 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
    pip install -e .
    ```
 
+### Troubleshooting
+
+- Upgrade pip
+- Use `python3.10 -m pip install -e .` if you don't normally use python
+- Use Cursor from the blender-mcp directory
+- Use `python3.10` in mcp.json (or whatever your normal Blender Python version is)
+
 ## Cursor Configuration
 
 1. Open Cursor in the root directory of the cloned blender-mcp repo. 
@@ -64,6 +71,11 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
     }
 }
 ```
+
+### Troubleshooting
+
+- Use Cursor from the blender-mcp directory
+- Use `python3.10` in mcp.json (or whatever your normal Blender Python version is)
 
 ## Blender Configuration
 
