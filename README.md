@@ -93,6 +93,3 @@ Instead of Cursor you can also use other MCP clients like the Claude Desktop App
 ## Acknowledgements
 
 [Blender MCP](https://github.com/sponsors/ahujasid)
-
-
-
