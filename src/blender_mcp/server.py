@@ -981,14 +981,14 @@ def search_csm_models(ctx: Context, search_text: str, limit: int = 20) -> str:
             else:
                 logger.warning(f"Blender addon search failed: {result}")
                 # Fall back to direct method - IMPORTANT: Pass "user" as tier to use the user's actual tier
-                return direct_search_csm_models_with_user_token(ctx, search_text, limit, "user")
+                return direct_search_csm_models_with_user_token(ctx, search_text, limit, "user", None)
                 
         except Exception as addon_error:
             # Log the error
             logger.error(f"Error using Blender addon for CSM search: {str(addon_error)}")
             
             # Fall back to direct method with user's token - IMPORTANT: Pass "user" as tier
-            return direct_search_csm_models_with_user_token(ctx, search_text, limit, "user")
+            return direct_search_csm_models_with_user_token(ctx, search_text, limit, "user", None)
             
     except Exception as e:
         logger.error(f"All CSM search methods failed: {str(e)}")
@@ -1060,13 +1060,229 @@ def direct_search_csm_models(ctx: Context, search_text: str, limit: int = 20, ti
     
     Returns a list of matching models with their details.
     """
-    return direct_search_csm_models_with_user_token(ctx, search_text, limit, tier)
+    return direct_search_csm_models_with_user_token(ctx, search_text, limit, tier, None)
 
 @mcp.tool()
-def direct_search_csm_models_with_user_token(ctx: Context, search_text: str, limit: int = 20, tier: str = "user") -> str:
+def direct_search_csm_models_with_user_token(ctx: Context, search_text: str, limit: int = 20, tier: str = "user", session_code: str = None) -> str:
     """Helper function that performs direct CSM.ai search with the user's token"""
     try:
         # Get the user's token from Blender
+        blender = get_blender_connection()
+        
+        # First check if CSM is enabled
+        status_result = blender.send_command("get_csm_status")
+        logger.info(f"CSM status check result: {status_result}")
+        
+        if not status_result.get('enabled', False):
+            return json.dumps({
+                "status": "error",
+                "message": "CSM.ai integration is not enabled in Blender",
+                "instructions": "Please enable CSM.ai integration in the Blender MCP panel."
+            }, indent=2)
+        
+        # Get the token from Blender using the get_correct_tier method which will already have the API key
+        # This is a more reliable way to get the API key than execute_code
+        tier_result = blender.send_command("get_correct_tier", {"get_key_only": True})
+        logger.info(f"Getting API key via get_correct_tier - Result type: {type(tier_result)}, Content: {tier_result}")
+        
+        # Try different methods to extract the API key
+        token = ""
+        if isinstance(tier_result, dict) and "api_key" in tier_result:
+            token = tier_result["api_key"]
+            logger.info(f"Got API key from tier_result dict: {token[:5]}...")
+        elif isinstance(tier_result, str) and len(tier_result) > 10:
+            # If we got the key directly as a string
+            token = tier_result
+            logger.info(f"Got API key directly as string: {token[:5]}...")
+        else:
+            # Fallback to execute_code
+            logger.info("Falling back to execute_code to get API key")
+            token_result = blender.send_command(
+                "execute_code", 
+                {"code": "import bpy; bpy.context.scene.blendermcp_csm_api_key"}
+            )
+            logger.info(f"execute_code result: {token_result}")
+            
+            # Try to get the result from various possible formats
+            if isinstance(token_result, dict):
+                token = token_result.get('result', '')
+            elif isinstance(token_result, str):
+                token = token_result
+        
+        logger.info(f"Final API key (sanitized): {'*' * len(token) if token else 'None/Empty'}")
+        
+        if not token:
+            return json.dumps({
+                "status": "error",
+                "message": "CSM.ai API key is not set in Blender",
+                "instructions": "Please set your CSM.ai API key in the Blender MCP panel."
+            }, indent=2)
+        
+        # Set up headers with the x-api-key approach
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': token,
+            'x-platform': 'web',
+        }
+        
+        # Check if we have a session_code to get details, otherwise perform a search
+        if session_code:
+            # Build the API URL for session details
+            url = f'https://api.csm.ai/image-to-3d-sessions/{session_code}'
+            
+            logger.info(f"Getting session details for session code: {session_code}")
+            
+            # Make the API request to CSM.ai
+            response = requests.get(url, headers=headers)
+            logger.info(f"CSM API response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_message = "Failed to get session details"
+                
+                # Provide more helpful error messages based on status code
+                if response.status_code == 403:
+                    error_message = "Authentication failed: Your CSM.ai API key may be invalid."
+                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                elif response.status_code == 401:
+                    error_message = "Authentication failed: Your CSM.ai API key is unauthorized."
+                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                elif response.status_code == 404:
+                    error_message = f"Session not found: {session_code}"
+                    instructions = "Please check if the session code is correct."
+                else:
+                    instructions = f"API request failed with status code {response.status_code}"
+                
+                # Log the error response
+                logger.error(f"CSM API error: {response.status_code}, Text: {response.text[:200]}...")
+                
+                return json.dumps({
+                    "status": "error",
+                    "message": error_message,
+                    "instructions": instructions,
+                    "details": response.text
+                }, indent=2)
+            
+            # Process the successful response
+            session_data = response.json()
+            logger.info(f"Successfully retrieved session data: {session_code}")
+            
+            # Extract the most relevant fields
+            result = {
+                "status": "success",
+                "session_code": session_code,
+                "session_status": session_data.get("data", {}).get("session_status"),
+                "percent_done": session_data.get("data", {}).get("percent_done"),
+                "image_url": session_data.get("data", {}).get("image_url"),
+                "mesh_url_glb": session_data.get("data", {}).get("mesh_url_glb"),
+                "mesh_url_obj": session_data.get("data", {}).get("mesh_url_obj"),
+                "mesh_url_fbx": session_data.get("data", {}).get("mesh_url_fbx"),
+                "created_at": session_data.get("data", {}).get("created_at"),
+                "updated_at": session_data.get("data", {}).get("updated_at"),
+                "full_response": session_data
+            }
+            
+            return json.dumps(result, indent=2)
+        
+        else:
+            # Perform a search instead of getting session details
+            # Build the search URL and params
+            search_url = 'https://api.csm.ai/search'
+            
+            # Determine which tier to use
+            actual_tier = tier
+            if tier == "user":
+                # Get the user's actual tier from Blender
+                tier_info = blender.send_command("get_correct_tier", {"get_key_only": False})
+                if isinstance(tier_info, dict) and "tier" in tier_info:
+                    actual_tier = tier_info["tier"]
+                elif isinstance(tier_info, str) and tier_info in ["free", "pro", "enterprise"]:
+                    actual_tier = tier_info
+                else:
+                    actual_tier = "enterprise"  # Default to enterprise
+                
+                logger.info(f"User's actual tier: {actual_tier}")
+                
+            # Set up search parameters
+            search_params = {
+                'searchTerm': search_text,
+                'limit': limit,
+                'tier': actual_tier
+            }
+            
+            logger.info(f"Searching CSM.ai with: {search_params}")
+            
+            # Make the search API request
+            response = requests.get(search_url, headers=headers, params=search_params)
+            logger.info(f"CSM Search API response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_message = "Failed to search CSM.ai models"
+                
+                # Provide more helpful error messages
+                if response.status_code == 403:
+                    error_message = "Authentication failed: Your CSM.ai API key may be invalid."
+                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                elif response.status_code == 401:
+                    error_message = "Authentication failed: Your CSM.ai API key is unauthorized."
+                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                else:
+                    instructions = f"API request failed with status code {response.status_code}"
+                
+                # Log the error response
+                logger.error(f"CSM API error: {response.status_code}, Text: {response.text[:200]}...")
+                
+                return json.dumps({
+                    "status": "error",
+                    "message": error_message,
+                    "instructions": instructions,
+                    "details": response.text
+                }, indent=2)
+            
+            # Process the successful response
+            search_data = response.json()
+            models = search_data.get("data", [])
+            
+            logger.info(f"Successfully retrieved {len(models)} models from CSM.ai")
+            
+            # Format the response similar to the addon's format
+            result = {
+                "status": "success",
+                "tier_used": actual_tier,
+                "total_found": len(models),
+                "models": models
+            }
+            
+            # Count models by tier
+            models_by_tier = {}
+            for model in models:
+                model_tier = model.get("tier", "unknown")
+                if model_tier not in models_by_tier:
+                    models_by_tier[model_tier] = 0
+                models_by_tier[model_tier] += 1
+            
+            result["models_by_tier"] = models_by_tier
+            
+            return json.dumps(result, indent=2)
+            
+    except Exception as e:
+        logger.error(f"Error with CSM.ai API: {str(e)}")
+        return json.dumps({
+            "status": "error",
+            "message": f"Error with CSM.ai API: {str(e)}"
+        }, indent=2)
+
+@mcp.tool()
+def get_correct_tier(ctx: Context, api_key: str = None, get_key_only: bool = False) -> str:
+    """
+    Get the correct tier for the user's CSM.ai account (or the API key if requested)
+    
+    Parameters:
+    - api_key: Optional API key to check (if None, will use the one from Blender)
+    - get_key_only: If True, return only the API key and don't check the tier
+    
+    Returns the tier or API key as specified.
+    """
+    try:
         blender = get_blender_connection()
         
         # First check if CSM is enabled
@@ -1078,271 +1294,64 @@ def direct_search_csm_models_with_user_token(ctx: Context, search_text: str, lim
                 "instructions": "Please enable CSM.ai integration in the Blender MCP panel."
             }, indent=2)
         
-        # Get the token from Blender
-        token_result = blender.send_command(
-            "execute_code", 
-            {"code": "import bpy; bpy.context.scene.blendermcp_csm_api_key"}
-        )
-        token = token_result.get('result', '')
+        # Get the tier or API key from the addon
+        result = blender.send_command("get_correct_tier", {"api_key": api_key, "get_key_only": get_key_only})
         
-        if not token:
+        # If we got a string, it's either the API key or tier
+        if isinstance(result, str):
+            if get_key_only:
+                # Don't log the actual key, just that we got it
+                logger.info(f"Retrieved API key (length: {len(result)})")
+                return json.dumps({
+                    "status": "success",
+                    "api_key": result
+                }, indent=2)
+            else:
+                logger.info(f"Retrieved user tier: {result}")
+                return json.dumps({
+                    "status": "success",
+                    "tier": result
+                }, indent=2)
+        # If we got a dict, return it directly
+        elif isinstance(result, dict):
+            return json.dumps({
+                "status": "success",
+                **result
+            }, indent=2)
+        else:
             return json.dumps({
                 "status": "error",
-                "message": "CSM.ai API key is not set in Blender",
-                "instructions": "Please set your CSM.ai API key in the Blender MCP panel."
+                "message": "Unexpected result from get_correct_tier",
+                "result": str(result)
             }, indent=2)
-        
-        # Get the private assets setting from Blender
-        private_assets_result = blender.send_command(
-            "execute_code", 
-            {"code": "import bpy; bpy.context.scene.blendermcp_csm_use_private_assets"}
-        )
-        use_private_assets = private_assets_result.get('result', True)
-        
-        # Determine which tier to use
-        actual_tier = "free"  # Default to free tier
-        
-        # If private assets are enabled or tier is "user", get the user's actual tier
-        if use_private_assets or tier == "user":
-            # Try to get the tier from the addon
-            tier_result = blender.send_command(
-                "get_correct_tier",
-                {"api_key": token}
-            )
             
-            # Log the tier result for debugging
-            logger.info(f"Tier result from addon: {tier_result}")
-            
-            if isinstance(tier_result, dict) and "tier" in tier_result:
-                actual_tier = tier_result["tier"]
-                logger.info(f"Got user tier from get_correct_tier dict: {actual_tier}")
-            elif isinstance(tier_result, str):
-                actual_tier = tier_result
-                logger.info(f"Got user tier from get_correct_tier string: {actual_tier}")
-            else:
-                # Fallback to direct implementation
-                actual_tier = get_user_tier_direct(token)
-                logger.info(f"Got user tier directly: {actual_tier}")
-        else:
-            # Use free tier if explicitly requested or if private assets are disabled
-            actual_tier = tier if tier != "user" else "free"
-            logger.info(f"Using tier: {actual_tier}")
-        
-        # IMPORTANT: Use the correct tier logic
-        # If tier is explicitly provided and not "user", use it
-        if tier and tier != "user":
-            filter_tier = tier
-            logger.info(f"Using explicitly provided tier: {filter_tier}")
-        else:
-            # Otherwise use the user's tier if private assets are enabled, or free tier if not
-            filter_tier = actual_tier if use_private_assets else "free"
-            logger.info(f"Using tier based on settings: {filter_tier}")
-        
-        # Set up headers with the x-api-key approach
-        headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': token,
-            'x-platform': 'web',
-        }
-        
-        # Set up the request body with the determined tier
-        data = {
-            'search_text': search_text,
-            'limit': limit,
-            'filter_body': {
-                'tier': filter_tier
-            }
-        }
-        
-        logger.info(f"Searching for '{search_text}' models on CSM.ai using tier: {filter_tier}")
-        logger.info(f"Request data: {data}")
-        
-        # Make the API request to CSM.ai
-        response = requests.post(
-            'https://api.csm.ai/image-to-3d-sessions/session-search/vector-search',
-            headers=headers,
-            json=data
-        )
-        
-        if response.status_code != 200:
-            error_message = "Direct API request failed"
-            
-            # Provide more helpful error messages based on status code
-            if response.status_code == 403:
-                error_message = "Authentication failed: Your CSM.ai API key may be invalid."
-                instructions = "Please get a new API key from the CSM.ai developer settings."
-            elif response.status_code == 401:
-                error_message = "Authentication failed: Your CSM.ai API key is unauthorized."
-                instructions = "Please get a new API key from the CSM.ai developer settings."
-            else:
-                instructions = f"API request failed with status code {response.status_code}"
-            
-            return json.dumps({
-                "status": "error",
-                "message": error_message,
-                "instructions": instructions,
-                "details": response.text
-            }, indent=2)
-        
-        data = response.json()
-        
-        # Filter results to only include models that have GLB files available
-        available_models = []
-        for model in data.get('data', []):
-            if model.get('mesh_url_glb'):
-                available_models.append({
-                    "id": model.get("_id"),
-                    "session_code": model.get("session_code"),
-                    "image_url": model.get("image_url"),
-                    "mesh_url_glb": model.get("mesh_url_glb"),
-                    "status": model.get("status"),
-                    "tier": model.get("tier_at_creation")
-                })
-        
-        return json.dumps({
-            "status": "success",
-            "models": available_models,
-            "total_found": len(data.get('data', [])),
-            "available_models": len(available_models),
-            "tier_used": actual_tier
-        }, indent=2)
-        
     except Exception as e:
-        logger.error(f"Error in direct CSM search: {str(e)}")
+        logger.error(f"Error getting correct tier: {str(e)}")
         return json.dumps({
             "status": "error",
-            "message": f"Error searching CSM models directly: {str(e)}",
-            "instructions": "Ensure you have a valid CSM.ai API key from:\nhttps://3d.csm.ai/my-profile?activeTab=developer_settings"
+            "message": f"Error getting correct tier: {str(e)}"
         }, indent=2)
 
 @mcp.tool()
-def direct_import_csm_model(ctx: Context, model_id: str, mesh_url_glb: str, name: str = None) -> str:
+def get_csm_session_details(ctx: Context, session_code: str) -> str:
     """
-    Import a 3D model from CSM.ai directly by downloading the GLB file and then using the Blender addon to import it.
-    
-    This is a fallback method that can be used if the regular import_csm_model function fails.
+    Get detailed information about a specific CSM.ai session by its session code.
     
     Parameters:
-    - model_id: The ID of the model to import
-    - mesh_url_glb: The URL of the GLB file to download
-    - name: Optional name for the imported model
+    - session_code: The unique code identifying the session
     
-    Returns information about the imported model.
+    Returns:
+    Details about the session, including status, progress, and URLs for the resulting 3D model.
     """
     try:
-        # Create a temp directory to store the downloaded file
-        import tempfile
-        import os
-        import urllib.request
-        
-        # Create temporary file with .glb extension
-        temp_dir = tempfile.gettempdir()
-        model_filename = name or f"csm_model_{model_id}"
-        if not model_filename.endswith(".glb"):
-            model_filename += ".glb"
-        
-        local_file_path = os.path.join(temp_dir, model_filename)
-        
-        # Download the GLB file
-        logger.info(f"Downloading GLB file from {mesh_url_glb} to {local_file_path}")
-        urllib.request.urlretrieve(mesh_url_glb, local_file_path)
-        
-        if not os.path.exists(local_file_path):
-            return json.dumps({
-                "status": "error",
-                "message": "Failed to download GLB file"
-            }, indent=2)
-        
-        # Now use the Blender addon to import the local file
-        try:
-            blender = get_blender_connection()
-            
-            # The import_file command should be available in the Blender addon
-            result = blender.send_command(
-                "import_file", 
-                {
-                    "filepath": local_file_path,
-                    "name": name or f"CSM_{model_id}"
-                }
-            )
-            
-            # Clean up the temp file after import
-            try:
-                os.remove(local_file_path)
-            except Exception as cleanup_error:
-                logger.warning(f"Failed to clean up temp file: {str(cleanup_error)}")
-            
-            return json.dumps({
-                "status": "success",
-                "message": f"Model imported via direct download",
-                "model_id": model_id,
-                "import_result": result
-            }, indent=2)
-            
-        except Exception as addon_error:
-            # If the Blender addon method fails, return the path to the downloaded file
-            logger.error(f"Error using Blender addon for import: {str(addon_error)}")
-            
-            return json.dumps({
-                "status": "partial_success",
-                "message": "GLB file downloaded but could not be imported automatically",
-                "model_id": model_id,
-                "local_file_path": local_file_path,
-                "error": str(addon_error)
-            }, indent=2)
-        
+        # Call the existing function with just the session code
+        return direct_search_csm_models_with_user_token(ctx, "", 0, "user", session_code)
     except Exception as e:
-        logger.error(f"Error in direct CSM import: {str(e)}")
+        logger.error(f"Error getting CSM session details: {str(e)}")
         return json.dumps({
             "status": "error",
-            "message": f"Error importing CSM model directly: {str(e)}"
+            "message": f"Error getting CSM session details: {str(e)}"
         }, indent=2)
-
-def get_user_tier_direct(api_key):
-    """
-    Get the user tier directly using the same approach as in csm_api_working.py
-    """
-    url = "https://api.csm.ai/user/userdata"
-    
-    # Set up the headers with the x-api-key
-    headers = {
-        'Accept': '*/*',
-        'Content-Type': 'application/json',
-        'x-platform': 'web',
-        'x-api-key': api_key
-    }
-    
-    logger.info(f"Checking user tier with API key: {api_key[:5]}...")
-    
-    try:
-        response = requests.get(url, headers=headers)
-        logger.info(f"Response status code: {response.status_code}")
-        
-        if response.status_code == 200:
-            response_json = response.json()
-            logger.info("User data retrieved successfully")
-            logger.info(f"User data response: {response_json}")
-            
-            # Extract data from the nested structure
-            if "data" in response_json:
-                user_data = response_json["data"]
-                
-                # Extract tier information
-                tier = user_data.get("tier")
-                logger.info(f"User tier: {tier}")
-                
-                return tier
-            else:
-                logger.warning("Error: 'data' field not found in response")
-                return "free"
-        else:
-            logger.warning(f"Error: {response.status_code}")
-            logger.warning(f"Response: {response.text}")
-            return "free"
-            
-    except Exception as e:
-        logger.error(f"Exception during API request: {e}")
-        return "free"
 
 # Main execution
 

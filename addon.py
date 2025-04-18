@@ -209,6 +209,8 @@ class BlenderMCPServer:
             "search_csm_models": self.search_csm_models,
             "import_csm_model": lambda **kwargs: self.import_csm_model(**kwargs),
             "animate_object": lambda **kwargs: self.animate_object(**kwargs),
+            "get_correct_tier": lambda **kwargs: self.get_correct_tier(**kwargs),
+            "import_file": lambda **kwargs: self.import_file(**kwargs),
         }
 
         handler = handlers.get(cmd_type)
@@ -466,8 +468,21 @@ class BlenderMCPServer:
         try:
             # Create a local namespace for execution
             namespace = {"bpy": bpy}
-            exec(code, namespace)
-            return {"executed": True}
+            
+            # Use eval if the code is a simple expression
+            if ";" not in code and "\n" not in code and "=" not in code:
+                try:
+                    # Try to evaluate as expression
+                    result = eval(code, namespace)
+                    return {"executed": True, "result": result}
+                except SyntaxError:
+                    # Not a simple expression, execute as statement
+                    exec(code, namespace)
+                    return {"executed": True}
+            else:
+                # For multi-line code or statements (not expressions)
+                exec(code, namespace)
+                return {"executed": True}
         except Exception as e:
             raise Exception(f"Code execution error: {str(e)}")
     
@@ -1003,16 +1018,26 @@ class BlenderMCPServer:
             "models": data.get('data', [])
         }
 
-    def get_correct_tier(self, api_key):
+    def get_correct_tier(self, api_key=None, get_key_only=False):
         """
         Checks the tier of a CSM.ai user using their API key.
         
         Args:
-            api_key: The CSM.ai API key
+            api_key: The CSM.ai API key (if None, gets it from Blender)
+            get_key_only: If True, just return the API key directly
             
         Returns:
-            str: The user's tier information or "free" on error
+            str: The user's tier information or "free" on error,
+                 or the API key if get_key_only is True
         """
+        # If no API key is provided, get it from Blender
+        if not api_key:
+            api_key = bpy.context.scene.blendermcp_csm_api_key
+            
+        # If we just need the key, return it now
+        if get_key_only:
+            return api_key
+            
         url = "https://api.csm.ai/user/userdata"
         
         # Set up the headers with the x-api-key
