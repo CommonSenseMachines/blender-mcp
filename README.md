@@ -4,8 +4,8 @@ Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This inte
 
 ```
       ╭───────────╮       ╭───────────╮       ╭───────────╮
-      │  CSM.ai   │◄━━━━━►│  Blender  │◄━━━━━►│  Cursor   │
-      │ 3D Assets │       │    MCP    │       │ AI Coding │
+      │  CSM.ai   │◄━━━━━►│  Blender  │◄━━━━━►│  MCP UI   │
+      │ 3D Assets │       │    MCP    │       │e.g.Cursor │
       ╰─────┬─────╯       ╰─────┬─────╯       ╰─────┬─────╯
             │                   │                   │
             ▼                   ▼                   ▼
@@ -79,6 +79,8 @@ This workflow creates a powerful ecosystem where:
 - Cursor serves as your AI coding assistant
 - Blender operates as your execution environment
 
+
+Instead of Cursor you can also use other MCP clients like the Claude Desktop App. See instructions in: [Blender MCP](https://github.com/sponsors/ahujasid). You will use the same mcp.json file as above but just enter it in the claude desktop UI.
 
 ## Acknowledgements
 
