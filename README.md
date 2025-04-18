@@ -25,9 +25,9 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 
 ## MCP Feature List ✨
 
-- 🔍 Ability to quickly search from public or private CSM.ai sessions. This allows interactive MCP based development.
+- 🔍 Ability to quickly search from public or private CSM.ai sessions. This allows interactive MCP based development. E.g. "Use CSM to get me a ghibli robot". Make sure you have some pre-generated robots on 3d.csm.ai or it will use some public session.
 
-- 🏃 For any humanoid like mesh in the scene, ability to animate given a text prompt (from a fixed library set)
+- 🏃 For any humanoid like mesh in the scene, ability to animate given a text prompt (from a fixed library set). E.g. "use csm to animate the 'robot' mesh to dance". This assumes the name of the object is 'robot'. To do subsequent animations, clear the space and make sure the original object is replicated (script should do this automatically).
 
 ## Installation
 
