@@ -1281,7 +1281,7 @@ class BlenderMCPServer:
                 }
                 
                 # Animation server URL
-                server_url = "http://35.190.131.188:9000/animate"
+                server_url = "https://animation.csm.ai/animate"
                 
                 # Send request and stream response to file
                 print(f"Sending animation request for prompt: '{animation_prompt}'...")

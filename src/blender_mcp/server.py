@@ -501,7 +501,7 @@ import time
 from pathlib import Path
 
 # Animation server URL
-SERVER_URL = "http://35.190.131.188:9000/animate"
+SERVER_URL = "https://animation.csm.ai/animate"
 
 def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide", collection_name=None):
     print(f"[DEBUG] Animation process started at: {time.strftime('%H:%M:%S')}")
