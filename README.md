@@ -17,7 +17,8 @@ Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This inte
       ╰─────────────────────────────────────────────────╯
 ```
 
-![CSM Blender MCP Demo](assets/csm-blender-mcp.mp4)
+<video src="assets/csm-blender-mcp.mp4" controls="controls" style="max-width: 730px;">
+</video>
 
 ## Overview
 
