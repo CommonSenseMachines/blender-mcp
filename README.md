@@ -29,21 +29,11 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 
 - 🏃 For any humanoid like mesh in the scene, ability to animate given a text prompt (from a fixed library set). E.g. "use csm to animate the 'robot' mesh to dance". This assumes the name of the object is 'robot'. To do subsequent animations, clear the space and make sure the original object is replicated (script should do this automatically).
 
-## Installation
+## Setup
 
-1. Clone the repository:
+Clone the repository:
    ```bash
    git clone https://github.com/CommonSenseMachines/blender-mcp.git
-   ```
-
-2. Navigate to the project directory (optional):
-   ```bash
-   cd blender-mcp
-   ```
-
-3. Install the package in development mode (advanced use or extensions):
-   ```bash
-   pip install -e .
    ```
 
 ## Cursor Configuration
