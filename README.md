@@ -1,4 +1,4 @@
-# BlenderMCP x CSM.ai x Cursor
+# BlenderMCP x CSM.ai x LLM Agents (e.g. Cursor / Claude)
 
 Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This integration enables text and image based editing capabilities in Blender.
 
