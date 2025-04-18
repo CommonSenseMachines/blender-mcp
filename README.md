@@ -88,6 +88,20 @@ This workflow creates a powerful ecosystem where:
 - Blender operates as your execution environment
 
 
+## Quickstart / Try It Out
+
+Once you have entered your CSM API key in the Blender addon settings and confirmed the MCP server is running (check `Cursor Settings → MCP`), you're ready to test the integration!
+
+Simply open a new chat window in Cursor (with any project open) and paste the following prompt:
+
+```prompt
+First, make sure to clear the scene. Then create a simple table just using blender, do no search for that. Once the table has been crafted, search for a dragon on CSM AI, add it to the scene and place it on top of the table in the middle. Then spell out the word "CSM x MCP" above the CSM asset, color it in #A157EE and make it very shiny metallic and rotate it 90deg so that it makes for a nice display facing the user. Also ensure that the table has nice textures.
+```
+
+This will trigger actions in Blender based on your instructions. The result from using the above prompt should look like this:
+
+![Quickstart Result](assets/quickstart_result.png)
+
 Instead of Cursor you can also use other MCP clients like the Claude Desktop App. See instructions in: [Blender MCP](https://github.com/sponsors/ahujasid). You will use the same mcp.json file as above but just enter it in the claude desktop UI.
 
 ## Acknowledgements
