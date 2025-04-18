@@ -17,6 +17,8 @@ Connect Blender, CSM.ai and LLMs via the Model Context Protocol (MCP). This inte
       ╰─────────────────────────────────────────────────╯
 ```
 
+https://github.com/CommonSenseMachines/blender-mcp/assets/5068315/d2507f0d-f6b2-40ef-bf37-3bcb8c11b8bf
+
 ## Overview
 
 BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowing for powerful AI-assisted 3D modeling workflows.
