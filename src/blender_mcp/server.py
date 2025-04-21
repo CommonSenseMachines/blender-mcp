@@ -421,14 +421,14 @@ def delete_object(ctx: Context, name: str) -> str:
         return f"Error deleting object: {str(e)}"
 
 @mcp.tool()
-def animate_object(ctx: Context, object_name: str, animation_prompt: str, temp_format: str = "glb", 
+def animate_object(ctx: Context, object_name: str, animation_fbx_path: str, temp_format: str = "glb", 
                  handle_original: str = "hide", collection_name: str = None) -> str:
     """
-    Animate a 3D model using AI-generated animation based on a text prompt.
+    Animate a 3D model using a provided FBX animation file.
     
     Parameters:
-    - object_name: Name of the object to animate
-    - animation_prompt: Text description of the desired animation (e.g., "walking", "dancing")
+    - object_name: Name of the object to animate (must be a MESH)
+    - animation_fbx_path: Path to the FBX animation file on the Blender machine's filesystem
     - temp_format: Format for temporary mesh export (default: "glb")
     - handle_original: How to handle the original object ("keep", "hide", "delete")
     - collection_name: Name of collection to organize animations (if None, creates "{object_name}_Animations")
@@ -483,7 +483,7 @@ if obj:
             # Continue with original object if duplication fails
         
         # Let the user know this might take some time
-        logger.info(f"Starting animation process for '{object_name}' with prompt '{animation_prompt}'")
+        logger.info(f"Starting animation process for '{object_name}' using FBX '{animation_fbx_path}'")
         logger.info("Animation processing may take 30-60 seconds or longer depending on model complexity")
         
         # Handle None value for collection_name properly
@@ -503,9 +503,9 @@ from pathlib import Path
 # Animation server URL
 SERVER_URL = "https://animation.csm.ai/animate"
 
-def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide", collection_name=None):
+def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hide", collection_name=None):
     print(f"[DEBUG] Animation process started at: {time.strftime('%H:%M:%S')}")
-    print(f"[DEBUG] Starting animation of {{obj_name}} with prompt '{{text_prompt}}'")
+    print(f"[DEBUG] Starting animation of {{obj_name}} using animation FBX '{{fbx_anim_path}}'")
     print(f"[DEBUG] Parameters: format={temp_format}, handle_original={handle_original}, collection={collection_name}")
     print("This may take 30-60 seconds or longer depending on model complexity")
     
@@ -532,9 +532,9 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
         # Create temporary filenames
         temp_mesh_path = os.path.join(temp_dir, f"{{obj_name}}_temp.{{temp_format}}")
         
-        # Clean prompt for output filename
-        safe_prompt = text_prompt.replace(" ", "_").replace("/", "-").lower()
-        output_fbx_path = os.path.join(temp_dir, f"{{obj_name}}_{{safe_prompt}}.fbx")
+        # Clean prompt for output filename - Use FBX filename stem
+        fbx_anim_name = Path(fbx_anim_path).stem
+        output_fbx_path = os.path.join(temp_dir, f"{{obj_name}}_{{fbx_anim_name}}.fbx")
         
         print(f"[DEBUG] Temp mesh path: {{temp_mesh_path}}")
         print(f"[DEBUG] Output FBX path: {{output_fbx_path}}")
@@ -560,7 +560,7 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
                 # Save a copy of the GLB file locally for inspection
                 local_debug_dir = os.path.join(os.path.expanduser("~"), "blender_mcp_debug")
                 os.makedirs(local_debug_dir, exist_ok=True)
-                local_glb_path = os.path.join(local_debug_dir, f"{{obj_name}}_{{safe_prompt}}_{time.strftime('%Y%m%d_%H%M%S')}.glb")
+                local_glb_path = os.path.join(local_debug_dir, f"{{obj_name}}_{{fbx_anim_name}}_{time.strftime('%Y%m%d_%H%M%S')}.glb")
                 import shutil
                 shutil.copy2(temp_mesh_path, local_glb_path)
                 print(f"[DEBUG] Saved local copy of GLB for inspection at: {{local_glb_path}}")
@@ -581,22 +581,39 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
             print(f"[ERROR] Exported file not found at {{temp_mesh_path}}")
             return {{"status": "error", "message": f"Failed to export temporary mesh file"}}
         
+        # Check if animation FBX exists
+        if not os.path.exists(fbx_anim_path):
+            print(f"[ERROR] Animation FBX file not found at {{fbx_anim_path}}")
+            return {{"status": "error", "message": f"Animation FBX file not found: {{fbx_anim_path}}"}}
+
         # Read and encode the mesh file
         file_size = os.path.getsize(temp_mesh_path)
-        print(f"[DEBUG] Reading exported file ({{file_size}} bytes)")
+        print(f"[DEBUG] Reading exported mesh file ({{file_size}} bytes)")
         try:
             with open(temp_mesh_path, "rb") as f:
                 mesh_b64 = base64.b64encode(f.read()).decode("utf-8")
-            print(f"[DEBUG] File encoded to base64 (length: {{len(mesh_b64)}})")
+            print(f"[DEBUG] Mesh file encoded to base64 (length: {{len(mesh_b64)}})")
         except Exception as encode_err:
-            print(f"[ERROR] File encoding failed: {{str(encode_err)}}")
+            print(f"[ERROR] Mesh file encoding failed: {{str(encode_err)}}")
             return {{"status": "error", "message": f"Failed to encode mesh file: {{str(encode_err)}}"}}
-        
+
+        # Read and encode the animation FBX file
+        anim_file_size = os.path.getsize(fbx_anim_path)
+        print(f"[DEBUG] Reading animation FBX file ({{anim_file_size}} bytes)")
+        try:
+            with open(fbx_anim_path, "rb") as f:
+                anim_b64 = base64.b64encode(f.read()).decode("utf-8")
+            print(f"[DEBUG] Animation FBX file encoded to base64 (length: {{len(anim_b64)}})")
+        except Exception as encode_err:
+            print(f"[ERROR] Animation FBX encoding failed: {{str(encode_err)}}")
+            return {{"status": "error", "message": f"Failed to encode animation FBX file: {{str(encode_err)}}"}}
+            
         # Build the request payload
         print(f"[DEBUG] Building API request payload")
         payload = {{
-            "mesh_b64_json": mesh_b64,
-            "text_prompt": text_prompt,
+            "mesh_b64_str": mesh_b64,              # Renamed key
+            "animation_fbx_b64_str": anim_b64,    # Added key
+            "text_prompt": "",                    # Text prompt no longer drives animation
             "is_gs": False,
             "opacity_threshold": 0.0,
             "no_fingers": False,
@@ -676,11 +693,11 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
                 print(f"[DEBUG] Imported object: {{new_obj.name}}, type: {{new_obj.type}}")
                 if new_obj.type == 'ARMATURE':
                     armature_obj = new_obj
-                    new_obj.name = f"{{obj_name}}_{{safe_prompt}}_armature"
+                    new_obj.name = f"{{obj_name}}_{{fbx_anim_name}}_armature" # Use FBX name
                     print(f"[DEBUG] Renamed armature to: {{new_obj.name}}")
                 elif new_obj.type == 'MESH':
                     mesh_obj = new_obj
-                    new_obj.name = f"{{obj_name}}_{{safe_prompt}}"
+                    new_obj.name = f"{{obj_name}}_{{fbx_anim_name}}" # Use FBX name
                     print(f"[DEBUG] Renamed mesh to: {{new_obj.name}}")
             
             # Organize them in a new collection
@@ -754,7 +771,7 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
             # Return the result
             result = {{
                 "status": "success",
-                "message": f"Animation created for {{obj_name}} with prompt '{{text_prompt}}'",
+                "message": f"Animation created for {{obj_name}} using FBX '{{fbx_anim_path}}'", # Updated message
                 "imported_objects": [o.name for o in imported_objects],
                 "collection": collection_name,
                 "original_object": obj_name,
@@ -782,8 +799,8 @@ def animate_mesh(obj_name, text_prompt, temp_format="glb", handle_original="hide
             return {{"status": "error", "message": str(e)}}
 
 # Run the animation function
-print(f"[DEBUG] Starting animation script with: object={object_name}, prompt='{animation_prompt}'")
-result = animate_mesh("{object_name}", "{animation_prompt}", "{temp_format}", "{handle_original}", {collection_name_arg})
+print(f"[DEBUG] Starting animation script with: object={object_name}, animation_fbx='{animation_fbx_path}'") # Updated print
+result = animate_mesh("{object_name}", "{animation_fbx_path}", "{temp_format}", "{handle_original}", {collection_name_arg}) # Pass fbx path
 print(f"[DEBUG] Animation result: {{json.dumps(result)}}")
 result
 """
@@ -874,10 +891,11 @@ def asset_creation_strategy() -> str:
     return """When creating 3D content in Blender, always start by checking if integrations are available:
 
     0. Before anything, always check the scene from get_scene_info()
-    1. CSM.ai is good at generating (via search) 3D models for single item very quickly.
-    Use get_csm_status() to verify its status
+    
+    1. CSM.ai is good at generating (via search) 3D MODELS ONLY - NOT ANIMATIONS.
+    Use get_csm_status() to verify its status.
     If CSM.ai is enabled:
-    - For objects/models, do the following steps:
+    - For searching and importing 3D MODELS ONLY (not animations), do the following steps:
         1. Search for existing 3D models using search_csm_models() with a descriptive text query
         2. Review the available models and select the most appropriate one
         3. Import the selected model using import_csm_model() with the model's ID and GLB URL
@@ -897,16 +915,27 @@ def asset_creation_strategy() -> str:
        double check the related object's location, scale, rotation, and world_bounding_box using get_object_info(),
        so that the object is in the desired location.
        
-    6. To add animation to a mesh object:
-       - Use animate_object() with the name of the object and a descriptive prompt. Duplicate the object first.
-       - Animation prompts can be actions like "walking", "dancing", "jumping", etc.
-       - Only mesh objects can be animated
-       - The animation will create a new animated version of the object
-       - The original object may be modified or hidden by the animation process
+    6. IMPORTANT: To add animation to a mesh object:
+       - DO NOT use CSM.ai search for animations - it doesn't provide animations.
+       - The animate_object() CSM tool requires an FBX animation file as input.
+       - ALWAYS instruct the user to download an FBX file from Mixamo first.
+       - ALWAYS direct users to Mixamo (https://www.mixamo.com) with these instructions:
+         1. Visit Mixamo and sign in with an Adobe account
+         2. Browse and select an appropriate animation
+         3. Download the animation as an FBX file:
+            - Use "Without Skin" option
+            - Set Format to "FBX"
+         4. Save the file locally and provide the full path to animate_object()
+       - Only after the user provides the local FBX file path, use animate_object() with:
+         1. The name of the object to animate
+         2. The FULL PATH to the local FBX file the user downloaded from Mixamo
+       - Only mesh objects can be animated.
+       - The animation process will create a new animated version of the object (armature + mesh).
+       - The original object may be modified or hidden by the animation process.
 
     Recommended workflow for creating assets:
-    1. First try CSM.ai for finding existing high-quality 3D models
-    2. For animation, use the animate_object() function with descriptive prompts
+    1. For 3D MODELS: Use CSM.ai search to find existing high-quality 3D models
+    2. For ANIMATIONS: Use CSM.ai's animate_object() tool, but ALWAYS get an FBX file from Mixamo first
     3. Only fall back to basic primitives as a last resort
 
     Only fall back to basic creation tools when:
