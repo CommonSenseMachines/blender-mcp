@@ -84,6 +84,10 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 5. Start the MCP server and enable the 'Use CSM.ai 3D models' option ![Start Server](assets/step1.png) ![Enable CSM](assets/step2.png)
 6. Enter your CSM API key to begin using the integration with Cursor
 
+### Troubleshooting
+
+- In Ubuntu, you may have to `sudo apt install blender`.
+
 ## CSM.ai Integration
 
 For optimal performance, the MCP server utilizes vector search-based 3D model retrieval. To enhance your experience:
