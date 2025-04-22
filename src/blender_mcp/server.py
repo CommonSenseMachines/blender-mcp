@@ -521,6 +521,12 @@ def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hi
         print(f"[ERROR] Object {{obj_name}} is not a mesh (type: {{obj.type}})")
         return {{"status": "error", "message": f"Object {{obj_name}} is not a mesh"}}
     
+    # Get CSM API key
+    api_key = bpy.context.scene.blendermcp_csm_api_key
+    if not api_key:
+        print(f"[ERROR] CSM.ai API key is not set")
+        return {{"status": "error", "message": "CSM.ai API key is not set. Please set your API key in the Blender MCP panel."}}
+    
     # Get Blender file directory
     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else None
     print(f"[DEBUG] Blender file directory: {{blend_dir}}")
@@ -627,13 +633,20 @@ def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hi
             "inplace": True
         }}
         
+        # Set up headers with API key
+        headers = {{
+            'Content-Type': 'application/json',
+            'x-api-key': api_key,
+            'x-platform': 'web'
+        }}
+        
         # Send request and stream response to file
         print(f"[DEBUG] Sending animation request to AI service: {{SERVER_URL}}")
         request_start_time = time.time()
         try:
             # Set a longer timeout for the animation API request
             print(f"[DEBUG] Initiating POST request with 120s timeout")
-            resp = requests.post(SERVER_URL, json=payload, stream=True, timeout=120)
+            resp = requests.post(SERVER_URL, json=payload, headers=headers, stream=True, timeout=120)
             
             print(f"[DEBUG] Received response with status code: {{resp.status_code}}")
             if resp.status_code != 200:

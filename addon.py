@@ -1280,12 +1280,27 @@ class BlenderMCPServer:
                     "inplace": True
                 }
                 
+                # Get CSM API key
+                api_key = bpy.context.scene.blendermcp_csm_api_key
+                if not api_key:
+                    return {
+                        "succeed": False,
+                        "error": "CSM.ai API key is not set. Please set your API key in the Blender MCP panel."
+                    }
+                
+                # Set up headers with API key
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': api_key,
+                    'x-platform': 'web'
+                }
+                
                 # Animation server URL
                 server_url = "https://animation.csm.ai/animate"
                 
                 # Send request and stream response to file
                 print(f"Sending animation request for prompt: '{animation_prompt}'...")
-                resp = requests.post(server_url, json=payload, stream=True)
+                resp = requests.post(server_url, json=payload, headers=headers, stream=True)
                 
                 if resp.status_code != 200:
                     error_text = resp.text
