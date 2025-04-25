@@ -48,7 +48,7 @@ BlenderMCP creates a bridge between Blender, CSM.ai and language models, allowin
 
 ### Troubleshooting
 
-- Upgrade pip
+- Upgrade pip, e.g. `python3 -m pip install --upgrade pip`
 - Use `python3.10 -m pip install -e .` if you don't normally use python
 
 ## Cursor Configuration
