@@ -118,6 +118,44 @@ This will trigger actions in Blender based on your instructions. The result from
 
 Instead of Cursor you can also use other MCP clients like the Claude Desktop App. See instructions in: [Blender MCP](https://github.com/sponsors/ahujasid). You will use the same mcp.json file as above but just enter it in the claude desktop UI. 
 
+## Python Test Client
+
+The repository includes a standalone Python client (`chat_client.py`) that demonstrates how to connect to the Blender MCP server programmatically. This is useful for:
+
+- Testing the Blender MCP connection without using Cursor or Claude Desktop
+- Understanding the MCP protocol and API
+- Developing your own custom MCP clients
+- Debugging MCP server responses
+
+### Running the Python Client
+
+1. Start Blender and enable the MCP addon as described in the "Blender Configuration" section.
+2. Open a terminal in the repository root and run:
+
+   ```bash
+   python chat_client.py
+   ```
+
+### Client Features
+
+The Python client connects to Blender via the Model Context Protocol and demonstrates several capabilities:
+
+- Lists all available MCP tools organized by category (query, creation, modification, etc.)
+- Retrieves and displays scene information from Blender
+- Creates a simple cube in the scene
+- Gets detailed information about the created object
+- Checks CSM.ai integration status
+
+### Extending the Client
+
+The client demonstrates how to work with the MCP format and handle various response types. You can use it as a starting point to:
+
+- Create scripts that automate Blender tasks
+- Build custom UIs on top of Blender's MCP capabilities
+- Integrate Blender with your own applications
+
+The code includes helper functions for extracting text from MCP responses and parsing JSON content, making it easy to work with the returned data.
+
 ## Acknowledgements
 
 [Blender MCP](https://github.com/sponsors/ahujasid)
