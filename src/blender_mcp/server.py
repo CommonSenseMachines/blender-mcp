@@ -1093,7 +1093,7 @@ def direct_search_csm_models(ctx: Context, search_text: str, limit: int = 20, ti
     Search for 3D models on CSM.ai using a direct API call.
     
     This is a backup method that directly calls the CSM.ai API.
-    You'll still need a valid API key from CSM.ai developer settings.
+    You'll still need a valid API key from CSM.ai developer settings: https://3d.csm.ai/dashboard/profile/developer-settings
     
     Parameters:
     - search_text: The text query to search for models
@@ -1184,10 +1184,10 @@ def direct_search_csm_models_with_user_token(ctx: Context, search_text: str, lim
                 # Provide more helpful error messages based on status code
                 if response.status_code == 403:
                     error_message = "Authentication failed: Your CSM.ai API key may be invalid."
-                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                    instructions = "Please get a new API key from the CSM.ai developer settings: https://3d.csm.ai/dashboard/profile/developer-settings"
                 elif response.status_code == 401:
                     error_message = "Authentication failed: Your CSM.ai API key is unauthorized."
-                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                    instructions = "Please get a new API key from the CSM.ai developer settings: https://3d.csm.ai/dashboard/profile/developer-settings"
                 elif response.status_code == 404:
                     error_message = f"Session not found: {session_code}"
                     instructions = "Please check if the session code is correct."
@@ -1263,10 +1263,10 @@ def direct_search_csm_models_with_user_token(ctx: Context, search_text: str, lim
                 # Provide more helpful error messages
                 if response.status_code == 403:
                     error_message = "Authentication failed: Your CSM.ai API key may be invalid."
-                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                    instructions = "Please get a new API key from the CSM.ai developer settings: https://3d.csm.ai/dashboard/profile/developer-settings"
                 elif response.status_code == 401:
                     error_message = "Authentication failed: Your CSM.ai API key is unauthorized."
-                    instructions = "Please get a new API key from the CSM.ai developer settings."
+                    instructions = "Please get a new API key from the CSM.ai developer settings: https://3d.csm.ai/dashboard/profile/developer-settings"
                 else:
                     instructions = f"API request failed with status code {response.status_code}"
                 

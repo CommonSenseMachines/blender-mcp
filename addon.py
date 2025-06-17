@@ -628,7 +628,7 @@ class BlenderMCPServer:
             
             # Ensure we have an API key
             if not self.ensure_valid_csm_token():
-                return {"status": "error", "message": "CSM.ai API key is not set. Visit https://3d.csm.ai/my-profile?activeTab=developer_settings to get your API key."}
+                return {"status": "error", "message": "CSM.ai API key is not set. Visit https://3d.csm.ai/dashboard/profile/developer-settings to get your API key."}
             
             api_key = bpy.context.scene.blendermcp_csm_api_key
             if not api_key:
@@ -1495,7 +1495,7 @@ class BLENDERMCP_OT_GetCSMAPIKey(bpy.types.Operator):
             layout.label(text="1. Log in to https://3d.csm.ai/")
             layout.label(text="2. Go to your profile")
             layout.label(text="3. Open the Developer Settings tab")
-            layout.label(text="4. URL: https://3d.csm.ai/my-profile?activeTab=developer_settings")
+            layout.label(text="4. URL: https://3d.csm.ai/dashboard/profile/developer-settings")
             layout.label(text="5. Copy your API key")
             layout.label(text="6. Paste it in the CSM.ai API Key field")
             
