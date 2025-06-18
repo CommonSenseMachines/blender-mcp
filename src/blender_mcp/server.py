@@ -504,9 +504,9 @@ from pathlib import Path
 SERVER_URL = "https://animation.csm.ai/animate"
 
 def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hide", collection_name=None):
-    print(f"[DEBUG] Animation process started at: {time.strftime('%H:%M:%S')}")
+    print(f"[DEBUG] Animation process started at: {{time.strftime('%H:%M:%S')}}")
     print(f"[DEBUG] Starting animation of {{obj_name}} using animation FBX '{{fbx_anim_path}}'")
-    print(f"[DEBUG] Parameters: format={temp_format}, handle_original={handle_original}, collection={collection_name}")
+    print(f"[DEBUG] Parameters: format={{temp_format}}, handle_original={{handle_original}}, collection={{collection_name}}")
     print("This may take 30-60 seconds or longer depending on model complexity")
     
     # Get the object
@@ -566,7 +566,7 @@ def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hi
                 # Save a copy of the GLB file locally for inspection
                 local_debug_dir = os.path.join(os.path.expanduser("~"), "blender_mcp_debug")
                 os.makedirs(local_debug_dir, exist_ok=True)
-                local_glb_path = os.path.join(local_debug_dir, f"{{obj_name}}_{{fbx_anim_name}}_{time.strftime('%Y%m%d_%H%M%S')}.glb")
+                local_glb_path = os.path.join(local_debug_dir, f"{{obj_name}}_{{fbx_anim_name}}_{{time.strftime('%Y%m%d_%H%M%S')}}.glb")
                 import shutil
                 shutil.copy2(temp_mesh_path, local_glb_path)
                 print(f"[DEBUG] Saved local copy of GLB for inspection at: {{local_glb_path}}")
@@ -783,7 +783,7 @@ def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hi
             if mesh_obj:
                 result["mesh"] = mesh_obj.name
                 
-            print(f"[DEBUG] Animation process completed at: {time.strftime('%H:%M:%S')}")
+            print(f"[DEBUG] Animation process completed at: {{time.strftime('%H:%M:%S')}}")
             return result
             
         except requests.exceptions.Timeout:
@@ -915,23 +915,44 @@ def asset_creation_strategy() -> str:
        double check the related object's location, scale, rotation, and world_bounding_box using get_object_info(),
        so that the object is in the desired location.
        
-    6. IMPORTANT: To add animation to a mesh object:
-       - DO NOT use CSM.ai search for animations - it doesn't provide animations.
-       - The animate_object() CSM tool requires an FBX animation file as input.
-       - ALWAYS instruct the user to download an FBX file from Mixamo first.
-       - ALWAYS direct users to Mixamo (https://www.mixamo.com) with these instructions:
-         1. Visit Mixamo and sign in with an Adobe account
-         2. Browse and select an appropriate animation
-         3. Download the animation as an FBX file:
-            - Use "Without Skin" option
-            - Set Format to "FBX"
-         4. Save the file locally and provide the full path to animate_object()
-       - Only after the user provides the local FBX file path, use animate_object() with:
-         1. The name of the object to animate
-         2. The FULL PATH to the local FBX file the user downloaded from Mixamo
-       - Only mesh objects can be animated.
-       - The animation process will create a new animated version of the object (armature + mesh).
-       - The original object may be modified or hidden by the animation process.
+    6. ANIMATION WORKFLOW - CSM-FIRST PRIORITY:
+       
+       **USE CSM ANIMATION API (COMPLEX) WHEN:**
+       • User mentions: walking, running, dancing, gestures, character motion  
+       • User says "using csm" or references CSM session + animation
+       • User wants: rigging, armature, character animation, poses
+       • Examples: "animate to walk", "running animation", "using csm"
+       
+       **USE BLENDER NATIVE (SIMPLE) WHEN:**
+       • User explicitly says "blender native", "keyframes", "simple rotation"
+       • Only basic transforms: spin, rotate, move, scale  
+       • Examples: "spin the object", "rotate slowly", "blender keyframes"
+       
+       **CSM ANIMATION WORKFLOW (PRIORITY for character motion):**
+       When user mentions walking, running, dancing, or "using csm":
+       
+       ### Step 1: Get FBX Animation from Mixamo
+       1. **Visit Mixamo**: [https://www.mixamo.com](https://www.mixamo.com) 🔗
+       2. **Download FBX** with "Without Skin" option
+       
+       ### Step 2: Use CSM Animation API
+       ```
+       animate_object(object_name, "/path/to/animation.fbx")
+       ```
+       
+       **SIMPLE BLENDER ANIMATION (ONLY when explicit):**
+       When user specifically requests "blender native" or "keyframes":
+       
+       ```python
+       import bpy
+       obj = bpy.data.objects['object_name']
+       obj.rotation_euler = (0, 0, 0)
+       obj.keyframe_insert(data_path="rotation_euler", frame=1)
+       obj.rotation_euler = (0, 0, 6.28)  # 360 degrees
+       obj.keyframe_insert(data_path="rotation_euler", frame=120)
+       ```
+       
+       **CRITICAL:** Default to CSM Animation API for any character motion!
 
     Recommended workflow for creating assets:
     1. For 3D MODELS: Use CSM.ai search to find existing high-quality 3D models
