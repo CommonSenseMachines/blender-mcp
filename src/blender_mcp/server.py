@@ -614,30 +614,17 @@ def animate_mesh(obj_name, fbx_anim_path, temp_format="glb", handle_original="hi
             print(f"[ERROR] Animation FBX encoding failed: {{str(encode_err)}}")
             return {{"status": "error", "message": f"Failed to encode animation FBX file: {{str(encode_err)}}"}}
             
-        # Build the request payload
+        # Build the request payload (simplified to match CSM Animation API)
         print(f"[DEBUG] Building API request payload")
         payload = {{
-            "mesh_b64_str": mesh_b64,              # Renamed key
-            "animation_fbx_b64_str": anim_b64,    # Added key
-            "text_prompt": "",                    # Text prompt no longer drives animation
-            "is_gs": False,
-            "opacity_threshold": 0.0,
-            "no_fingers": False,
-            "rest_pose_type": None,
-            "ignore_pose_parts": [],
-            "input_normal": False,
-            "bw_fix": True,
-            "bw_vis_bone": "LeftArm",
-            "reset_to_rest": False,
-            "retarget": True,
-            "inplace": True
+            "mesh_b64_str": mesh_b64,
+            "animation_fbx_b64_str": anim_b64
         }}
         
-        # Set up headers with API key
+        # Set up headers with API key (simplified to match CSM Animation API)
         headers = {{
-            'Content-Type': 'application/json',
-            'x-api-key': api_key,
-            'x-platform': 'web'
+            "Content-Type": "application/json",
+            "x-api-key": api_key
         }}
         
         # Send request and stream response to file
